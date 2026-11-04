@@ -1,0 +1,10 @@
+# LF everywhere: gofmt expects it, and migration checksums must not depend on
+# how Git checks files out on Windows.
+* text=auto eol=lf
+
+# PowerShell scripts keep Windows line endings.
+*.ps1 text eol=crlf
+
+*.png binary
+*.ico binary
+*.woff2 binary

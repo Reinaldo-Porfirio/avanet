@@ -1,0 +1,27 @@
+# Build output
+*.exe
+/dist/
+
+# Local databases and logs (never commit measurement data)
+*.db
+*.db-wal
+*.db-shm
+*.log
+*.log.[0-9]*
+
+# Test and coverage output
+*.test
+coverage.out
+coverage.html
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
