@@ -51,12 +51,13 @@ func (c ConnectionCost) String() string {
 
 // Network describes the interface currently used to reach the internet.
 type Network struct {
-	Kind          ConnectionKind
-	InterfaceName string     // e.g. "Wi-Fi", as shown by Windows
-	Description   string     // adapter model
-	Gateway       netip.Addr // zero value when the interface has no gateway
-	LinkSpeedMbps uint64     // negotiated link speed, not internet speed
-	Cost          ConnectionCost
+	InterfaceIndex uint32 // operating system's interface number
+	Kind           ConnectionKind
+	InterfaceName  string     // e.g. "Wi-Fi", as shown by Windows
+	Description    string     // adapter model
+	Gateway        netip.Addr // zero value when the interface has no gateway
+	LinkSpeedMbps  uint64     // negotiated link speed, not internet speed
+	Cost           ConnectionCost
 }
 
 // IsMobileData reports whether measurements on this network must respect the

@@ -50,6 +50,16 @@ func bestInterfaceIndex() (uint32, error) {
 	return index, nil
 }
 
+// Counters returns the cumulative bytes moved by an interface, used to detect
+// other traffic during a speed test.
+func (Reader) Counters(index uint32) (domain.InterfaceCounters, error) {
+	row := windows.MibIfRow2{InterfaceIndex: index}
+	if err := windows.GetIfEntry2Ex(windows.MibIfEntryNormal, &row); err != nil {
+		return domain.InterfaceCounters{}, fmt.Errorf("GetIfEntry2Ex(%d): %w", index, err)
+	}
+	return domain.InterfaceCounters{RxBytes: row.InOctets, TxBytes: row.OutOctets}, nil
+}
+
 func describeInterface(index uint32) (domain.Network, error) {
 	adapters, err := adapterAddresses()
 	if err != nil {
@@ -61,10 +71,11 @@ func describeInterface(index uint32) (domain.Network, error) {
 			continue
 		}
 		network := domain.Network{
-			Kind:          kindFromIfType(a.IfType),
-			InterfaceName: windows.UTF16PtrToString(a.FriendlyName),
-			Description:   windows.UTF16PtrToString(a.Description),
-			LinkSpeedMbps: a.ReceiveLinkSpeed / 1_000_000,
+			InterfaceIndex: index,
+			Kind:           kindFromIfType(a.IfType),
+			InterfaceName:  windows.UTF16PtrToString(a.FriendlyName),
+			Description:    windows.UTF16PtrToString(a.Description),
+			LinkSpeedMbps:  a.ReceiveLinkSpeed / 1_000_000,
 		}
 		if a.FirstGatewayAddress != nil {
 			if gw, ok := netip.AddrFromSlice(a.FirstGatewayAddress.Address.IP()); ok {

@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fases 0, 1 e 2 concluídas. Próxima: Fase 3 (velocidade).
+> **Status:** Fases 0 a 3 concluídas. Próxima: Fase 4 (agente em segundo plano).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -81,6 +81,17 @@ Outros achados:
 - Orçamento: com ~100 MB por teste, 2 GB/dia comportam ~20 testes. Os intervalos dos perfis
   (seção 5) são recalibrados na Fase 3.
 
+### Resultado da Fase 3 (2026-11-05, mesma máquina)
+
+| Achado | Consequência |
+|---|---|
+| A latência pelo "tempo até o primeiro byte" HTTP deu **51 ms** contra 11–15 ms do ping: o servidor da Cloudflare gasta ~40 ms processando cada requisição (`Server-Timing: cfSpeedWorker`). | Latência do teste = tempo do **handshake TCP** (puro tempo de rede): 15–17 ms. |
+| O upload é cronometrado pelo **relógio do próprio servidor** (`cfSpeedWorker`), como faz o medidor oficial da Cloudflare. Validação: relógio do cliente e do servidor concordaram com < 1% de diferença (102,0 × 102,4 Mbps). | Relógio do cliente fica como alternativa se o cabeçalho sumir. |
+| O `curl` do Windows mediu ~25% a menos de upload, mas o relógio do servidor mostrou o próprio `curl` enviando mais devagar. | `curl` no Windows **não serve de referência** de upload. |
+| Descartar os primeiros 30% de cada transferência (aceleração do TCP) elevou o download de 657 para **660–730 Mbps**. | Correção adotada. |
+| As respostas da Cloudflare trazem **IP, cidade e coordenadas do usuário** em cabeçalhos `cf-meta-*`. | O cliente nunca lê esses cabeçalhos; o servidor é identificado pelo `CF-RAY` (datacenter). |
+| Um teste completo num link de ~700/100 Mbps usa **~130 MB** (90 MB down + 40 MB up). | 2 GB/dia comportam ~15 testes. Perfis com teste de hora em hora precisam de ajuste no agendador (Fase 4). |
+
 ### Riscos
 
 1. **Endpoints da Cloudflare não têm termos publicados para uso por terceiros** (são os mesmos
@@ -147,16 +158,26 @@ No Windows, "dados móveis" significa **hotspot do celular** ou **modem USB/4G**
 
 | Situação | Padrão |
 |---|---|
-| Cabo / Wi-Fi comum | Teto de **2 GB/dia** (configurável). Cada teste: até ~50 MB de download e ~20 MB de upload. |
-| Rede móvel | **Desligado.** Se ativado: teto de **50 MB/dia** (configurável até 200 MB), testes de velocidade pequenos (≤ 5 MB) e poucos por dia. Métricas leves seguem normais. |
+| Cabo / Wi-Fi comum | Teto de **2 GB/dia**. Cada teste: até **100 MB de download e 45 MB de upload** (permite chegar ao degrau de 50 MB). ✅ Fase 3 |
+| Rede móvel | **Desligado.** Se ativado: teto de **50 MB/dia** (configurável até 200 MB); cada teste até **6 MB down / 2 MB up**. Métricas leves seguem normais. ✅ Fase 3 |
+
+O consumo fica gravado no banco (`data_usage`, por dia local e tipo de rede), então o teto
+vale mesmo reiniciando o app. Um teste só começa se o saldo do dia cobrir o **pior caso** dele,
+de modo que o teto nunca é ultrapassado; bytes de um teste interrompido também são cobrados.
+Por enquanto o teste em rede móvel exige `avanet speedtest -movel` a cada vez; a configuração
+permanente vem com o painel (Fase 6).
 
 - **Detecção de rede móvel:** usar a marcação de "conexão limitada" do Windows
   (`INetworkCostManager`, validado na Fase 0) e o tipo do adaptador. O usuário também pode
   marcar uma rede manualmente como móvel.
 - **Gatilho adaptativo:** se a latência piorar de repente, roda um teste de velocidade extra para
   confirmar (no máximo 1 extra por hora, dentro do orçamento).
-- **Teste com tamanho crescente:** começa pequeno e aumenta até a transferência levar ~2 s ou
-  bater o teto. Assim uma internet lenta não gasta dados à toa e uma rápida ainda é bem medida.
+- **Teste com tamanho crescente:** degraus de 0,1 → 1 → 4 → 10 → 25 → 50 MB; para quando uma
+  transferência dura ≥ 1 s ou o próximo degrau não cabe no teto. Uma internet lenta não gasta
+  dados à toa e uma rápida ainda é bem medida.
+- **Uso local:** os contadores da placa de rede antes e depois do teste mostram se outros
+  programas usaram a rede ao mesmo tempo (excesso > 15% do teste e > 1 MB); o resultado sai
+  marcado como "pode estar abaixo do real".
 - O consumo do próprio app aparece na interface ("hoje: 340 MB de 2 GB").
 
 ## 7. Relatórios
@@ -295,7 +316,7 @@ avanet/
 | `wifi_snapshots` | id, ts, network_id, signal_pct, rssi_dbm, band, channel, link_rate_mbps |
 | `outages` | id, network_id, started_at, ended_at |
 | `heartbeats` | id, started_at, ended_at (intervalos contínuos em que o agente esteve ativo) |
-| `data_usage` | date, network_kind, bytes_used |
+| `data_usage` ✅ | day (YYYY-MM-DD local), data_class (fixed/mobile), bytes — migração 0002 |
 | `daily_reports` | date, profile, summary_json, generated_at, notified_at |
 | `settings` | key, value |
 
@@ -312,7 +333,7 @@ e na separação por dia. Tabelas `STRICT` (o SQLite valida os tipos).
 | Migrações | ✅ Migrador próprio (~150 linhas): SQL numerado embutido no binário, checksum de cada migração aplicada, recusa banco de versão mais nova. Preferido ao goose por ser pequeno e sem dependências. |
 | Logs | ✅ `log/slog` (JSON) com rotação própria por tamanho (5 MB × 4 arquivos) |
 | Latência | `pro-bing` (ICMP, sem admin); `IcmpSendEcho` como plano B |
-| Velocidade | Cliente HTTP próprio contra a Cloudflare, atrás de uma interface |
+| Velocidade | ✅ Cliente HTTP próprio contra a Cloudflare: sem redirecionamentos, sem compressão, HTTPS obrigatório, nunca lê além do tamanho pedido; upload gerado na hora (ChaCha8), sem buffer em memória |
 | Rede / Wi-Fi | `golang.org/x/sys/windows` + `wlanapi.dll` + `INetworkCostManager` (COM) |
 | Bandeja | `fyne.io/systray` |
 | Notificação | `git.sr.ht/~jackmordaunt/go-toast/v2` (WinRT via COM) |
@@ -388,7 +409,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 | **0 — Spike** ✅ | Experimentos no Windows do dono: latência sem admin, gateway, velocidade (Cloudflare), Wi-Fi, conexão limitada, bandeja e notificação. Tudo viável; resultado na seção 3. |
 | **1 — Fundação** ✅ | Repositório, módulo Go, CLI (`run`, `version`, `help`), configuração validada, logs com rotação, SQLite com migrações e verificação de integridade, testes, lint, `check.ps1`, CI, Dependabot. Conceito visual do painel. |
 | **2 — Sondas leves** ✅ | Latência até o roteador e 3 alvos (Cloudflare, Google, Quad9) em paralelo, com mediana, jitter e perda; "latência da internet" = melhor alvo. Detector de quedas (2 rodadas seguidas sem resposta). Rede: interface realmente usada (`GetBestInterfaceEx`), gateway, tipo, conexão limitada. Wi-Fi: sinal, RSSI, canal, faixa (pela frequência do ponto de acesso) e padrão. Comando `avanet probe`. Gravação no banco fica com o agente (Fase 4). |
-| **3 — Velocidade** | Teste de download/upload com tamanho crescente, orçamento de dados, rede móvel desligada por padrão, detecção de uso local. |
+| **3 — Velocidade** ✅ | Download/upload em degraus contra a Cloudflare, com correção da aceleração do TCP (download) e relógio do servidor (upload); latência pelo handshake TCP; orçamento diário gravado no banco; rede móvel bloqueada sem consentimento; detecção de uso local. Comando `avanet speedtest [-movel]`. Achados na seção 3. |
 | **4 — Agente** | Bandeja, agendador por perfil, gatilho adaptativo, iniciar com o Windows, instância única, heartbeat/cobertura. |
 | **5 — Relatório diário** | Análise do dia, relatório às 8h, recuperação ao ligar, notificação. |
 | **6 — Painel** | Servidor local seguro, tela inicial (status agora), aba Relatórios com gráficos, escolha de perfil com descrições, configurações (orçamento, rede móvel, plano contratado). |
