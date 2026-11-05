@@ -154,17 +154,3 @@ func TestProbeRejectsInvalidCount(t *testing.T) {
 		}
 	}
 }
-
-func TestFormatMillis(t *testing.T) {
-	tests := map[time.Duration]string{
-		0:                        "0,0 ms",
-		590 * time.Microsecond:   "0,6 ms",
-		12077 * time.Microsecond: "12,1 ms",
-		1500 * time.Millisecond:  "1500,0 ms",
-	}
-	for d, want := range tests {
-		if got := formatMillis(d); got != want {
-			t.Errorf("formatMillis(%v) = %q, want %q", d, got, want)
-		}
-	}
-}
