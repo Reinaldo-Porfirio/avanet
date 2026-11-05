@@ -25,6 +25,14 @@ func TestCurrentOnThisMachine(t *testing.T) {
 		t.Error("InterfaceName is empty")
 	}
 	t.Logf("kind=%v gateway=%v link=%d Mbps cost=%v", network.Kind, network.Gateway, network.LinkSpeedMbps, network.Cost)
+
+	counters, err := Reader{}.Counters(network.InterfaceIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counters.RxBytes == 0 {
+		t.Error("an interface that reaches the internet must have received bytes")
+	}
 }
 
 func TestKindFromIfType(t *testing.T) {

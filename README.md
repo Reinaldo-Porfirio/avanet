@@ -4,7 +4,7 @@ Monitor de qualidade de internet para Windows. Fica em segundo plano medindo lat
 download e upload, e todo dia às 8h entrega um relatório do dia anterior: melhores e piores horários,
 se o problema está no seu Wi-Fi ou na operadora e, com alguns dias de dados, os padrões da sua conexão.
 
-> **Status:** em desenvolvimento. Fase 0 (viabilidade) e Fase 1 (fundação) concluídas.
+> **Status:** em desenvolvimento. Fases 0 a 3 concluídas (diagnóstico e teste de velocidade pelo terminal).
 > Planejamento completo em [docs/PLANEJAMENTO.md](docs/PLANEJAMENTO.md).
 
 ## Princípios
@@ -21,6 +21,7 @@ Requisitos: [Go](https://go.dev/dl/) (versão do `go.mod`) e Git.
 ```powershell
 go run ./cmd/avanet            # inicia o agente (Ctrl+C para sair)
 go run ./cmd/avanet probe      # diagnóstico rápido: conexão, Wi-Fi e latência agora
+go run ./cmd/avanet speedtest  # download e upload (respeita o orçamento diário de dados)
 go run ./cmd/avanet version
 go test ./...
 .\scripts\check.ps1            # todas as verificações do CI (rode antes de cada commit)
@@ -42,7 +43,7 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 | `internal/domain` | tipos e regras puras: estatísticas de latência, rede, Wi-Fi, quedas |
 | `internal/netinfo` | interface usada para a internet, roteador, conexão limitada |
 | `internal/wifi` | estado do Wi-Fi pela API nativa do Windows |
-| `internal/probe` | sondas de medição (latência) |
+| `internal/probe` | sondas de medição: latência (ICMP) e velocidade (Cloudflare) |
 | `internal/logging` | logs JSON com rotação por tamanho |
 | `internal/storage` | SQLite: abertura segura, verificação de integridade, migrações |
 | `spikes/` | experimentos da Fase 0 (descartáveis, guardados como registro de decisão) |

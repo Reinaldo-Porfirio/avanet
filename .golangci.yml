@@ -40,7 +40,7 @@ linters:
           sizeThreshold: 128
     misspell:
       # The user interface is in Portuguese; these are not English typos.
-      ignore-rules: [comando, comandos]
+      ignore-rules: [comando, comandos, programas]
     nolintlint:
       require-explanation: true
       require-specific: true

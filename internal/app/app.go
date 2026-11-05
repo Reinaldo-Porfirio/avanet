@@ -38,8 +38,13 @@ type Env struct {
 	Getenv func(key string) string
 }
 
-// errUsage marks errors caused by invalid command line input.
-var errUsage = errors.New("invalid usage")
+var (
+	// errUsage marks errors caused by invalid command line input.
+	errUsage = errors.New("invalid usage")
+	// errReported marks failures the command already explained to the user
+	// in Portuguese; Main only sets the exit code.
+	errReported = errors.New("failure already reported")
+)
 
 // Main runs the command named by args[0] and returns the process exit code.
 // With no arguments it runs the agent, which is how Windows starts it at logon.
@@ -55,6 +60,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		err = runAgent(ctx, rest, env)
 	case "probe":
 		err = runProbe(ctx, rest, env)
+	case "speedtest":
+		err = runSpeedTest(ctx, rest, env)
 	case "version":
 		err = printVersion(rest, env)
 	case "help", "-h", "-help", "--help":
@@ -74,6 +81,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		fmt.Fprintf(env.Stderr, "erro: %v\n\n", err)
 		printUsage(env.Stderr)
 		return ExitUsage
+	case errors.Is(err, errReported):
+		return ExitFailure
 	default:
 		fmt.Fprintf(env.Stderr, "erro: %v\n", err)
 		return ExitFailure
@@ -90,6 +99,8 @@ Comandos:
   run        inicia o monitoramento (padrão quando nenhum comando é informado)
   probe      diagnóstico rápido: conexão, Wi-Fi e latência agora
              -n N  pacotes por alvo (padrão 10)
+  speedtest  mede download e upload agora (respeita o orçamento diário de dados)
+             -movel  permite este teste em dados móveis/hotspot
   version    mostra a versão
   help       mostra esta ajuda
 
@@ -117,12 +128,9 @@ func runAgent(ctx context.Context, args []string, env Env) error {
 		return fmt.Errorf("%w: run takes no arguments", errUsage)
 	}
 
-	cfg, err := config.Load(env.Getenv)
+	cfg, err := prepareDataDir(env)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-	if err := os.MkdirAll(cfg.DataDir, dataDirPerm); err != nil {
-		return fmt.Errorf("create data directory: %w", err)
+		return err
 	}
 
 	logger, logFile, err := logging.New(logging.Options{Dir: cfg.LogDir(), Level: cfg.LogLevel})
@@ -159,4 +167,16 @@ func runAgent(ctx context.Context, args []string, env Env) error {
 
 	logger.Info("agent stopping", "reason", context.Cause(ctx))
 	return nil
+}
+
+// prepareDataDir loads the configuration and makes sure the data directory exists.
+func prepareDataDir(env Env) (config.Config, error) {
+	cfg, err := config.Load(env.Getenv)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("load config: %w", err)
+	}
+	if err := os.MkdirAll(cfg.DataDir, dataDirPerm); err != nil {
+		return config.Config{}, fmt.Errorf("create data directory: %w", err)
+	}
+	return cfg, nil
 }
