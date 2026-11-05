@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/Reinaldo-Porfirio/avanet/internal/domain"
 	"github.com/Reinaldo-Porfirio/avanet/internal/netinfo"
 	"github.com/Reinaldo-Porfirio/avanet/internal/probe"
+	"github.com/Reinaldo-Porfirio/avanet/internal/ptbr"
 	"github.com/Reinaldo-Porfirio/avanet/internal/wifi"
 )
 
@@ -185,7 +185,7 @@ func renderLatency(w io.Writer, round probe.Round) {
 	flush(tw)
 
 	if best, ok := round.Best(); ok {
-		fmt.Fprintf(w, "\n  Internet: %s (melhor alvo: %s)\n", formatMillis(best.Stats.Median), best.Target.Name)
+		fmt.Fprintf(w, "\n  Internet: %s (melhor alvo: %s)\n", ptbr.Millis(best.Stats.Median), best.Target.Name)
 	} else {
 		fmt.Fprintln(w, "\n  Internet: nenhum alvo respondeu. Sem conexão com a internet?")
 	}
@@ -196,10 +196,10 @@ func latencyRow(w io.Writer, name string, res probe.TargetResult) {
 	case res.Err != nil:
 		fmt.Fprintf(w, "  %s\terro\t\t\t%v\n", name, res.Err)
 	case !res.Stats.Reachable():
-		fmt.Fprintf(w, "  %s\t—\t—\t%s\t\n", name, formatPercent(res.Stats.LossPercent()))
+		fmt.Fprintf(w, "  %s\t—\t—\t%s\t\n", name, ptbr.Percent(res.Stats.LossPercent()))
 	default:
 		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t\n", name,
-			formatMillis(res.Stats.Median), formatMillis(res.Stats.Jitter), formatPercent(res.Stats.LossPercent()))
+			ptbr.Millis(res.Stats.Median), ptbr.Millis(res.Stats.Jitter), ptbr.Percent(res.Stats.LossPercent()))
 	}
 }
 
@@ -244,15 +244,4 @@ func bandAndChannel(info *domain.WiFi) string {
 		return fmt.Sprintf("%s · canal %d", band, info.Channel)
 	}
 	return band
-}
-
-// formatMillis renders a duration in milliseconds with one decimal and a
-// decimal comma, as Brazilian Portuguese readers expect.
-func formatMillis(d time.Duration) string {
-	value := strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 1, 64)
-	return strings.Replace(value, ".", ",", 1) + " ms"
-}
-
-func formatPercent(p float64) string {
-	return strconv.FormatFloat(p, 'f', 0, 64) + "%"
 }

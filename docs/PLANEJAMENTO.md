@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fases 0 a 3 concluídas. Próxima: Fase 4 (agente em segundo plano).
+> **Status:** Fases 0 a 4 concluídas. Próxima: Fase 5 (relatório diário).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -133,12 +133,14 @@ descrição abaixo é o texto que aparece na interface.
 | Perfil | Descrição para o usuário | Foco | Leve | Velocidade |
 |---|---|---|---|---|
 | **Uso básico** | "Navegar, redes sociais, WhatsApp e e-mail. Mede pouco e economiza recursos." | estabilidade, quedas | 5 min | a cada 3 h |
-| **Streaming** | "Assistir Netflix, YouTube e afins. Foca em velocidade de download estável para o vídeo não travar." | download | 5 min | a cada 1 h |
+| **Streaming** | "Assistir Netflix, YouTube e afins. Foca em velocidade de download estável para o vídeo não travar." | download | 5 min | a cada 1h30 |
 | **Jogos online** | "Para quem joga online. Foca no tempo de resposta (ping) e em travadinhas (jitter e perda), que importam mais que velocidade." | latência, jitter, perda | 1 min | a cada 3 h |
-| **Home office** | "Videochamadas e trabalho remoto. Foca em upload e estabilidade, que é o que faz a chamada travar ou cortar." | upload, jitter, perda | 2 min | a cada 1 h |
-| **Completo** | "Mede tudo, o tempo todo, dentro do limite de dados. Para quem quer todos os números." | todas | 1 min | a cada 30 min* |
+| **Home office** | "Videochamadas e trabalho remoto. Foca em upload e estabilidade, que é o que faz a chamada travar ou cortar." | upload, jitter, perda | 2 min | a cada 1h30 |
+| **Completo** | "Mede tudo, o tempo todo, dentro do limite de dados. Para quem quer todos os números." | todas | 1 min | a cada 1 h* |
 
-\* Sempre limitado pelo orçamento diário de dados (seção 6).
+\* Sempre limitado pelo orçamento diário de dados (seção 6): com ~130 MB por teste num link rápido,
+2 GB/dia comportam ~15 testes, e o agendador espaça os testes quando o intervalo do perfil não
+caberia (Fase 4). Intervalos de velocidade recalibrados na Fase 4 a partir dos números da Fase 3.
 
 **Limiares iniciais** (valores de partida, ajustados com dados reais):
 
@@ -258,11 +260,23 @@ sem afastar quem não entende de rede:
  └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Um único executável.** O painel (HTML, CSS, JS e a biblioteca de gráficos) vai embutido no
-  `.exe` com `go:embed`.
-- **Inicia com o Windows** pela chave `HKCU\...\Run`, sem precisar de administrador.
-- **Instância única:** abrir o app de novo só abre o painel.
-- **Heartbeat:** o agente registra a cada minuto que está ativo. É daí que sai a cobertura.
+- **Um código, dois executáveis** (decisão da Fase 4, como `python.exe`/`pythonw.exe`):
+  `avanet.exe` (console, para os comandos) e `avanetw.exe` (compilado com `-H=windowsgui`: sem
+  janela, só o ícone na bandeja). Com um único executável de console, o Windows abriria uma
+  janela de terminal a cada inicialização. O painel (HTML, CSS, JS) vai embutido com `go:embed`.
+- **Inicia com o Windows** pela chave `HKCU\...\Run` apontando para o `avanetw.exe`, sem
+  administrador (`avanet autostart on|off`). Aparece em "Aplicativos de inicialização" do
+  Gerenciador de Tarefas, onde o usuário também pode desligar.
+- **Instância única** por pasta de dados (mutex `Local\` do Windows): abrir de novo avisa que já
+  está rodando. A pasta de desenvolvimento (`AVANET_DATA_DIR`) não bloqueia a real.
+- **Sessões (cobertura):** cada inicialização abre uma sessão, estendida a cada rodada. Uma pausa
+  maior que 3 intervalos (suspensão/hibernação) fecha a sessão e abre outra; ela não conta como
+  cobertura nem como queda.
+- **Agenda dos testes de velocidade:** mantém o intervalo do perfil enquanto o orçamento do dia
+  permite; senão espalha os testes que cabem até a meia-noite (ex.: 13 testes em 16 h → um a
+  cada ~74 min), para a noite não ficar sem medição. Um teste extra roda quando a latência
+  dobra e sobe 30 ms acima da média recente (no máximo 1 por hora). O agendamento usa o relógio
+  do agente e sobrevive a reinícios (último teste lido do banco).
 
 **Por que painel web local e não janela nativa?** O Go não tem uma biblioteca de interface
 nativa madura e simples para Windows. HTML+JS dá gráficos bons de graça, é o mesmo modelo do
@@ -273,22 +287,26 @@ Syncthing (outro app Go) e é fácil de reaproveitar se um dia virar produto. Al
 
 ```
 avanet/
-  cmd/avanet/              # main: monta as peças e inicia o agente
+  cmd/avanet/              # ✅ executável de console (comandos)
+  cmd/avanetw/             # ✅ executável sem janela (bandeja; o que inicia com o Windows)
   internal/
     app/                   # ✅ linha de comando e ligação entre os pacotes
+    agent/                 # ✅ monitor: rodadas, agenda dos testes, quedas, sessões, teste com orçamento
     buildinfo/             # ✅ versão do executável
     config/                # ✅ configuração do processo (pasta de dados, nível de log), validada
     logging/               # ✅ logs JSON com rotação por tamanho
-    domain/                # ✅ tipos e regras puras (latência, rede, Wi-Fi, quedas) — sem I/O
-    netinfo/               # ✅ interface usada para a internet, gateway, tipo, conexão limitada
+    domain/                # ✅ tipos e regras puras (latência, rede, Wi-Fi, quedas, perfis, agenda) — sem I/O
+    netinfo/               # ✅ interface usada para a internet, gateway, tipo, conexão limitada, contadores
     wifi/                  # ✅ sinal, RSSI, canal, faixa e padrão do Wi-Fi (wlanapi.dll)
-    probe/                 # ✅ latência (pro-bing, vários alvos em paralelo); velocidade na Fase 3
-    scheduler/             # agenda por perfil, orçamento de dados, gatilho adaptativo
+    probe/                 # ✅ latência (pro-bing) e velocidade (Cloudflare)
+    ptbr/                  # ✅ números no formato brasileiro (vírgula decimal)
+    instance/              # ✅ instância única (mutex do Windows)
+    autostart/             # ✅ iniciar com o Windows (registro HKCU\...\Run)
+    tray/                  # ✅ ícone na bandeja (cor pela qualidade) e menu
     analysis/              # agregação diária, percentis, faixas de horário, padrões, plano contratado
     report/                # monta o relatório diário a partir da análise
-    storage/               # ✅ SQLite (abertura segura, integridade, migrações); repositórios a seguir
+    storage/               # ✅ SQLite: migrações, medições, sessões, configurações
     notify/                # notificação do Windows atrás de uma interface Notifier
-    tray/                  # bandeja e "iniciar com o Windows" (Fase 4)
     web/                   # servidor local, API JSON, segurança (token, Host)
   ui/                      # painel: HTML/CSS/JS + biblioteca de gráficos (embutido no build)
   docs/
@@ -306,19 +324,24 @@ avanet/
   diferentes num só pacote.)*
 - Nova sonda = novo arquivo em `probe/`, sem alterar o agendador (princípio aberto/fechado).
 
-### Modelo de dados (rascunho)
+### Modelo de dados
+
+Durações em microssegundos inteiros (`_us`), velocidades em Mbps (`REAL`).
 
 | Tabela | Campos principais |
 |---|---|
-| `networks` | id, kind (ethernet/wifi/mobile), ssid, is_metered, contracted_down_mbps, contracted_up_mbps, label |
-| `latency_samples` | id, ts, network_id, target (gateway/internet), rtt_median_ms, jitter_ms, loss_pct, sent, received |
-| `speed_tests` | id, ts, network_id, download_mbps, upload_mbps, bytes_down, bytes_up, duration_ms, server, trigger (scheduled/adaptive/manual), local_traffic_flag, status |
-| `wifi_snapshots` | id, ts, network_id, signal_pct, rssi_dbm, band, channel, link_rate_mbps |
-| `outages` | id, network_id, started_at, ended_at |
-| `heartbeats` | id, started_at, ended_at (intervalos contínuos em que o agente esteve ativo) |
+| `networks` ✅ | id, kind (ethernet/wifi/mobile/other), interface_name, ssid, first_seen_ms — migração 0003 |
+| `latency_samples` ✅ | at_ms, network_id, target (gateway/Cloudflare/Google/Quad9), sent, received, median/jitter/min/max_us (NULL sem resposta) |
+| `speed_tests` ✅ | at_ms, network_id, trigger (scheduled/adaptive/manual), server, idle_latency_us, download/upload_mbps, bytes_down/up, *_capped, local_traffic |
+| `wifi_snapshots` ✅ | at_ms, network_id, signal_percent, rssi_dbm, channel, band, standard, rx_rate_mbps |
+| `outages` ✅ | network_id, started_ms, ended_ms (NULL enquanto dura) |
+| `agent_sessions` ✅ | started_ms, last_ms — períodos contínuos de execução (cobertura) |
 | `data_usage` ✅ | day (YYYY-MM-DD local), data_class (fixed/mobile), bytes — migração 0002 |
-| `daily_reports` | date, profile, summary_json, generated_at, notified_at |
-| `settings` | key, value |
+| `settings` ✅ | key, value (`profile` na Fase 4) |
+| `daily_reports` | date, profile, summary_json, generated_at, notified_at (Fase 5) |
+
+Volume: com o perfil Completo, ~5.800 linhas de latência por dia (alguns MB por mês). Uma
+rotina de limpeza/compactação do histórico antigo fica para quando houver relatórios (Fase 5).
 
 Horários guardados como **inteiros em milissegundos UTC** (colunas com sufixo `_ms`):
 compactos, rápidos para consultas por intervalo e convertidos para o fuso local só na exibição
@@ -410,7 +433,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 | **1 — Fundação** ✅ | Repositório, módulo Go, CLI (`run`, `version`, `help`), configuração validada, logs com rotação, SQLite com migrações e verificação de integridade, testes, lint, `check.ps1`, CI, Dependabot. Conceito visual do painel. |
 | **2 — Sondas leves** ✅ | Latência até o roteador e 3 alvos (Cloudflare, Google, Quad9) em paralelo, com mediana, jitter e perda; "latência da internet" = melhor alvo. Detector de quedas (2 rodadas seguidas sem resposta). Rede: interface realmente usada (`GetBestInterfaceEx`), gateway, tipo, conexão limitada. Wi-Fi: sinal, RSSI, canal, faixa (pela frequência do ponto de acesso) e padrão. Comando `avanet probe`. Gravação no banco fica com o agente (Fase 4). |
 | **3 — Velocidade** ✅ | Download/upload em degraus contra a Cloudflare, com correção da aceleração do TCP (download) e relógio do servidor (upload); latência pelo handshake TCP; orçamento diário gravado no banco; rede móvel bloqueada sem consentimento; detecção de uso local. Comando `avanet speedtest [-movel]`. Achados na seção 3. |
-| **4 — Agente** | Bandeja, agendador por perfil, gatilho adaptativo, iniciar com o Windows, instância única, heartbeat/cobertura. |
+| **4 — Agente** ✅ | Agente que mede no intervalo do perfil e grava tudo (latência, Wi-Fi, velocidade, quedas, sessões); agenda dos testes que espalha o orçamento; teste extra quando a latência piora; suspensão não vira queda; bandeja com ícone colorido pela qualidade e "Testar velocidade agora"; `avanetw.exe` sem janela; iniciar com o Windows; instância única. Comandos `run [-tray]`, `status`, `profile`, `autostart`. |
 | **5 — Relatório diário** | Análise do dia, relatório às 8h, recuperação ao ligar, notificação. |
 | **6 — Painel** | Servidor local seguro, tela inicial (status agora), aba Relatórios com gráficos, escolha de perfil com descrições, configurações (orçamento, rede móvel, plano contratado). |
 | **7 — Inteligência** | Padrões de 3+ dias com nível de confiança, comparação com o plano contratado (Anatel). |

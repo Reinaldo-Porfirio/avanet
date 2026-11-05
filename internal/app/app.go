@@ -7,15 +7,12 @@ package app
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/Reinaldo-Porfirio/avanet/internal/buildinfo"
 	"github.com/Reinaldo-Porfirio/avanet/internal/config"
-	"github.com/Reinaldo-Porfirio/avanet/internal/logging"
-	"github.com/Reinaldo-Porfirio/avanet/internal/storage"
 )
 
 // Exit codes returned by Main.
@@ -62,6 +59,12 @@ func Main(ctx context.Context, args []string, env Env) int {
 		err = runProbe(ctx, rest, env)
 	case "speedtest":
 		err = runSpeedTest(ctx, rest, env)
+	case "status":
+		err = runStatus(ctx, rest, env)
+	case "profile":
+		err = runProfile(ctx, rest, env)
+	case "autostart":
+		err = runAutostart(rest, env)
 	case "version":
 		err = printVersion(rest, env)
 	case "help", "-h", "-help", "--help":
@@ -96,11 +99,15 @@ Uso:
   avanet [comando]
 
 Comandos:
-  run        inicia o monitoramento (padrão quando nenhum comando é informado)
+  run        monitora continuamente (padrão quando nenhum comando é informado)
+             -tray  mostra o ícone perto do relógio em vez de escrever no terminal
+  status     resumo de hoje: cobertura, última medição, último teste, dados usados
   probe      diagnóstico rápido: conexão, Wi-Fi e latência agora
              -n N  pacotes por alvo (padrão 10)
   speedtest  mede download e upload agora (respeita o orçamento diário de dados)
              -movel  permite este teste em dados móveis/hotspot
+  profile    mostra os perfis de uso; "avanet profile <id>" escolhe um
+  autostart  "on" inicia o AvaNet com o Windows, "off" desliga; sem argumento, mostra
   version    mostra a versão
   help       mostra esta ajuda
 
@@ -115,57 +122,6 @@ func printVersion(args []string, env Env) error {
 		return fmt.Errorf("%w: version takes no arguments", errUsage)
 	}
 	fmt.Fprintf(env.Stdout, "avanet %s\n", buildinfo.Version())
-	return nil
-}
-
-func runAgent(ctx context.Context, args []string, env Env) error {
-	flags := flag.NewFlagSet("run", flag.ContinueOnError)
-	flags.SetOutput(io.Discard) // usage is printed by Main
-	if err := flags.Parse(args); err != nil {
-		return fmt.Errorf("%w: %w", errUsage, err)
-	}
-	if flags.NArg() > 0 {
-		return fmt.Errorf("%w: run takes no arguments", errUsage)
-	}
-
-	cfg, err := prepareDataDir(env)
-	if err != nil {
-		return err
-	}
-
-	logger, logFile, err := logging.New(logging.Options{Dir: cfg.LogDir(), Level: cfg.LogLevel})
-	if err != nil {
-		return fmt.Errorf("start logging: %w", err)
-	}
-	defer func() {
-		if closeErr := logFile.Close(); closeErr != nil {
-			fmt.Fprintf(env.Stderr, "aviso: falha ao fechar o log: %v\n", closeErr)
-		}
-	}()
-
-	db, err := storage.Open(ctx, cfg.DatabasePath())
-	if err != nil {
-		if ctx.Err() != nil {
-			// Interrupted during startup (e.g. Ctrl+C): a normal shutdown, not a
-			// failure. Migrations run in transactions, so nothing is left half-done.
-			logger.Info("agent interrupted during startup", "reason", context.Cause(ctx))
-			return nil
-		}
-		logger.Error("open database failed", "error", err)
-		return fmt.Errorf("open database: %w", err)
-	}
-	defer func() {
-		if closeErr := db.Close(); closeErr != nil {
-			logger.Error("close database failed", "error", closeErr)
-		}
-	}()
-
-	logger.Info("agent started", "version", buildinfo.Version(), "data_dir", cfg.DataDir)
-	fmt.Fprintf(env.Stdout, "AvaNet %s em execução. Dados em %s. Ctrl+C para sair.\n", buildinfo.Version(), cfg.DataDir)
-
-	<-ctx.Done()
-
-	logger.Info("agent stopping", "reason", context.Cause(ctx))
 	return nil
 }
 

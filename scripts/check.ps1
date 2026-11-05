@@ -33,7 +33,8 @@ try {
     Invoke-Step 'go vet' { go vet ./... }
     Invoke-Step 'golangci-lint' { go run $golangciLint run ./... }
     Invoke-Step 'testes' { go test -count=1 ./... }
-    Invoke-Step 'build' { go build -trimpath -o "$env:TEMP\avanet-check.exe" ./cmd/avanet }
+    Invoke-Step 'build (console)' { go build -trimpath -o "$env:TEMP\avanet-check.exe" ./cmd/avanet }
+    Invoke-Step 'build (bandeja, sem janela)' { go build -trimpath -ldflags '-H=windowsgui' -o "$env:TEMP\avanetw-check.exe" ./cmd/avanetw }
     Invoke-Step 'vulnerabilidades (govulncheck)' { go run $govulncheck ./... }
     Invoke-Step 'segredos (gitleaks)' { go run $gitleaks dir --redact . }
     Write-Host 'Tudo certo.' -ForegroundColor Green

@@ -3,6 +3,7 @@ module github.com/Reinaldo-Porfirio/avanet
 go 1.27.3
 
 require (
+	fyne.io/systray v1.12.2
 	github.com/prometheus-community/pro-bing v0.9.1
 	golang.org/x/sys v0.49.0
 	modernc.org/sqlite v1.61.1
@@ -10,6 +11,7 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect

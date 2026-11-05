@@ -7,42 +7,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/Reinaldo-Porfirio/avanet/internal/agent"
 	"github.com/Reinaldo-Porfirio/avanet/internal/buildinfo"
 	"github.com/Reinaldo-Porfirio/avanet/internal/domain"
 	"github.com/Reinaldo-Porfirio/avanet/internal/netinfo"
 	"github.com/Reinaldo-Porfirio/avanet/internal/probe"
+	"github.com/Reinaldo-Porfirio/avanet/internal/ptbr"
 	"github.com/Reinaldo-Porfirio/avanet/internal/storage"
+	"github.com/Reinaldo-Porfirio/avanet/internal/wifi"
 )
-
-// accountingTimeout bounds the write that charges the data budget. It runs
-// even after Ctrl+C: bytes already transferred must always be counted.
-const accountingTimeout = 5 * time.Second
-
-// speedSources are the speed test's dependencies, injectable for tests.
-type speedSources struct {
-	network  func() (domain.Network, error)
-	counters func(index uint32) (domain.InterfaceCounters, error)
-	run      func(ctx context.Context, limits domain.TransferLimits) (domain.SpeedResult, error)
-	now      func() time.Time
-}
-
-// usageStore persists the daily data usage (implemented by *storage.DB).
-type usageStore interface {
-	DataUsage(ctx context.Context, day domain.Day, class domain.DataClass) (int64, error)
-	AddDataUsage(ctx context.Context, day domain.Day, class domain.DataClass, bytes int64) error
-}
-
-type speedOutcome struct {
-	network    domain.Network
-	class      domain.DataClass
-	result     domain.SpeedResult
-	usedToday  int64 // including this test
-	dailyLimit int64
-}
 
 func runSpeedTest(ctx context.Context, args []string, env Env) (err error) {
 	flags := flag.NewFlagSet("speedtest", flag.ContinueOnError)
@@ -69,77 +44,62 @@ func runSpeedTest(ctx context.Context, args []string, env Env) (err error) {
 		}
 	}()
 
-	budget := domain.DefaultDataBudget()
-	budget.MobileEnabled = *allowMobile // explicit, per-run consent
-
 	logger := slog.New(slog.NewTextHandler(env.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	reader := netinfo.Reader{Logger: logger}
-	src := speedSources{
-		network:  reader.Current,
-		counters: reader.Counters,
-		run:      probe.Speed{UserAgent: "AvaNet/" + buildinfo.Version()}.Run,
-		now:      time.Now,
+	network, err := reader.Current()
+	if err != nil {
+		if explainSpeedError(env.Stderr, err) {
+			return errReported
+		}
+		return fmt.Errorf("read network: %w", err)
 	}
 
-	outcome, err := measureSpeed(ctx, src, db, budget, env.Stdout)
-	if explained := explainSpeedError(env.Stderr, err); explained {
+	runner := newSpeedRunner(reader, db, *allowMobile)
+	outcome, err := runner.Measure(ctx, network, func(limits domain.TransferLimits) {
+		fmt.Fprintf(env.Stdout, "Medindo download e upload (no máximo %s de dados)...\n\n", ptbr.MB(limits.Total()))
+	})
+	if explainSpeedError(env.Stderr, err) {
 		return errReported
 	}
 	if err != nil {
 		return err
 	}
-	renderSpeed(env.Stdout, &outcome)
+
+	if err := saveManualSpeedTest(ctx, db, network, &outcome.Result); err != nil {
+		return err
+	}
+	renderSpeed(env.Stdout, network, &outcome)
 	return nil
 }
 
-// measureSpeed checks the budget, runs the test, charges the bytes used and
-// flags local traffic. progress receives a line before the test starts.
-func measureSpeed(ctx context.Context, src speedSources, usage usageStore, budget domain.DataBudget, progress io.Writer) (speedOutcome, error) {
-	if err := budget.Validate(); err != nil {
-		return speedOutcome{}, err
+// newSpeedRunner wires the real speed test with the default budget. Mobile
+// data needs explicit consent (`-movel` here; a setting in a later phase).
+func newSpeedRunner(reader netinfo.Reader, usage agent.UsageStore, allowMobile bool) agent.SpeedRunner {
+	budget := domain.DefaultDataBudget()
+	budget.MobileEnabled = allowMobile
+	return agent.SpeedRunner{
+		Run:      probe.Speed{UserAgent: "AvaNet/" + buildinfo.Version()}.Run,
+		Counters: reader.Counters,
+		Usage:    usage,
+		Budget:   budget,
+		Now:      time.Now,
 	}
-	network, err := src.network()
-	if err != nil {
-		return speedOutcome{}, fmt.Errorf("read network: %w", err)
-	}
+}
 
-	out := speedOutcome{network: network, class: domain.ClassOf(network), dailyLimit: budget.Daily(domain.ClassOf(network))}
-	day := domain.DayOf(src.now())
-	used, err := usage.DataUsage(ctx, day, out.class)
-	if err != nil {
-		return speedOutcome{}, err
-	}
-	limits, err := budget.Plan(out.class, used)
-	if err != nil {
-		return speedOutcome{}, err
-	}
-
-	before, countersErr := src.counters(network.InterfaceIndex)
-
-	fmt.Fprintf(progress, "Medindo download e upload (no máximo %s de dados)...\n\n", formatMB(limits.Total()))
-	result, runErr := src.run(ctx, limits)
-
-	if result.BytesUsed() > 0 {
-		chargeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accountingTimeout)
-		chargeErr := usage.AddDataUsage(chargeCtx, day, out.class, result.BytesUsed())
-		cancel()
-		if chargeErr != nil {
-			return speedOutcome{}, errors.Join(runErr, fmt.Errorf("charge data budget: %w", chargeErr))
+func saveManualSpeedTest(ctx context.Context, db *storage.DB, network domain.Network, result *domain.SpeedResult) error {
+	// The agent identifies Wi-Fi networks by name; do the same so manual and
+	// automatic tests on the same network share its record.
+	ssid := ""
+	if network.Kind == domain.ConnectionWiFi {
+		if info, err := wifi.Current(); err == nil {
+			ssid = info.SSID
 		}
 	}
-	if runErr != nil {
-		return speedOutcome{}, fmt.Errorf("speed test: %w", runErr)
+	netID, err := db.EnsureNetwork(ctx, network, ssid, time.Now())
+	if err != nil {
+		return err
 	}
-
-	if countersErr == nil {
-		if after, err := src.counters(network.InterfaceIndex); err == nil {
-			result.LocalTraffic = domain.LocalTrafficSuspected(before, after, result.BytesUsed())
-		}
-	}
-
-	out.result = result
-	out.usedToday = used + result.BytesUsed()
-	return out, nil
+	return db.SaveSpeedTest(ctx, netID, storage.TriggerManual, result)
 }
 
 // explainSpeedError prints a Portuguese explanation for expected refusals and
@@ -162,22 +122,18 @@ func explainSpeedError(w io.Writer, err error) bool {
 	return false
 }
 
-func renderSpeed(w io.Writer, o *speedOutcome) {
-	r := &o.result
-	fmt.Fprintf(w, "Velocidade · %s · %s\n\n", r.Server, connectionKindName(o.network.Kind))
+func renderSpeed(w io.Writer, network domain.Network, o *agent.SpeedOutcome) {
+	r := &o.Result
+	fmt.Fprintf(w, "Velocidade · %s · %s\n\n", r.Server, connectionKindName(network.Kind))
 
 	tw := newTable(w)
-	fmt.Fprintf(tw, "  Download\t%s\n", formatMbps(r.DownloadMbps))
-	fmt.Fprintf(tw, "  Upload\t%s\n", formatMbps(r.UploadMbps))
-	fmt.Fprintf(tw, "  Latência\t%s (com a conexão ociosa)\n", formatMillis(r.IdleLatency))
+	fmt.Fprintf(tw, "  Download\t%s\n", ptbr.Mbps(r.DownloadMbps))
+	fmt.Fprintf(tw, "  Upload\t%s\n", ptbr.Mbps(r.UploadMbps))
+	fmt.Fprintf(tw, "  Latência\t%s (com a conexão ociosa)\n", ptbr.Millis(r.IdleLatency))
 	flush(tw)
 
-	className := "rede fixa"
-	if o.class == domain.DataMobile {
-		className = "dados móveis"
-	}
 	fmt.Fprintf(w, "\n  Dados usados neste teste: %s · hoje: %s de %s (%s)\n",
-		formatMB(r.BytesUsed()), formatMB(o.usedToday), formatMB(o.dailyLimit), className)
+		ptbr.MB(r.BytesUsed()), ptbr.MB(o.UsedToday), ptbr.MB(o.DailyLimit), dataClassName(o.Class))
 
 	if r.DownloadCapped {
 		fmt.Fprintln(w, "\n  Observação: o download chegou ao teto de dados do teste antes de durar 1 s;")
@@ -193,10 +149,9 @@ func renderSpeed(w io.Writer, o *speedOutcome) {
 	}
 }
 
-func formatMbps(v float64) string {
-	return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1) + " Mbps"
-}
-
-func formatMB(bytes int64) string {
-	return strings.Replace(strconv.FormatFloat(float64(bytes)/domain.MB, 'f', 1, 64), ".", ",", 1) + " MB"
+func dataClassName(c domain.DataClass) string {
+	if c == domain.DataMobile {
+		return "dados móveis"
+	}
+	return "rede fixa"
 }

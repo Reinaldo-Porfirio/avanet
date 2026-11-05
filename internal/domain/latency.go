@@ -23,6 +23,15 @@ type LatencyStats struct {
 	Jitter time.Duration
 }
 
+// TargetLatency is the outcome for one target of a latency round, as stored.
+type TargetLatency struct {
+	Target string // "gateway" or an internet target's name
+	Stats  LatencyStats
+}
+
+// GatewayTarget is the Target name used for the router.
+const GatewayTarget = "gateway"
+
 // Reachable reports whether the target answered at least once.
 func (s LatencyStats) Reachable() bool { return s.Received > 0 }
 
