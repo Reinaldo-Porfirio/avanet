@@ -33,6 +33,11 @@ linters:
       enabled-tags: [diagnostic, performance, style]
       disabled-checks:
         - whyNoLint # covered by nolintlint
+      settings:
+        hugeParam:
+          # Small value types (a few machine words, like domain.Network) read
+          # better by value; anything larger goes by pointer.
+          sizeThreshold: 128
     misspell:
       # The user interface is in Portuguese; these are not English typos.
       ignore-rules: [comando, comandos]
@@ -44,6 +49,11 @@ linters:
       # Test fixtures use fixed file paths and permissions on purpose.
       - path: _test\.go
         linters: [gosec]
+      # Calling the Win32 API requires unsafe.Pointer. It is confined to
+      # *_windows.go files, and the mirrored C struct layouts are pinned by tests.
+      - path: _windows\.go
+        linters: [gosec]
+        text: G103
 
 formatters:
   enable:

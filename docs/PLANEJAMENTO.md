@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fase 0 (viabilidade) e Fase 1 (fundação) concluídas. Próxima: Fase 2.
+> **Status:** Fases 0, 1 e 2 concluídas. Próxima: Fase 3 (velocidade).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -258,14 +258,16 @@ avanet/
     buildinfo/             # ✅ versão do executável
     config/                # ✅ configuração do processo (pasta de dados, nível de log), validada
     logging/               # ✅ logs JSON com rotação por tamanho
-    domain/                # tipos e regras puras (Sample, SpeedTest, Profile, limiares) — sem I/O
-    probe/                 # sondas: latency, gateway, speedtest, wifi — todas com a mesma interface
+    domain/                # ✅ tipos e regras puras (latência, rede, Wi-Fi, quedas) — sem I/O
+    netinfo/               # ✅ interface usada para a internet, gateway, tipo, conexão limitada
+    wifi/                  # ✅ sinal, RSSI, canal, faixa e padrão do Wi-Fi (wlanapi.dll)
+    probe/                 # ✅ latência (pro-bing, vários alvos em paralelo); velocidade na Fase 3
     scheduler/             # agenda por perfil, orçamento de dados, gatilho adaptativo
     analysis/              # agregação diária, percentis, faixas de horário, padrões, plano contratado
     report/                # monta o relatório diário a partir da análise
     storage/               # ✅ SQLite (abertura segura, integridade, migrações); repositórios a seguir
     notify/                # notificação do Windows atrás de uma interface Notifier
-    platform/windows/      # bandeja, iniciar com o Windows, tipo de conexão, conexão limitada
+    tray/                  # bandeja e "iniciar com o Windows" (Fase 4)
     web/                   # servidor local, API JSON, segurança (token, Host)
   ui/                      # painel: HTML/CSS/JS + biblioteca de gráficos (embutido no build)
   docs/
@@ -275,8 +277,12 @@ avanet/
 
 **Regras:**
 - `domain` não importa nenhum outro pacote do projeto.
-- Código específico do Windows fica isolado em `platform/windows`. Portar para Linux/Android
-  depois significa escrever outra implementação dessas interfaces, sem mexer no resto.
+- Código específico do Windows fica em arquivos `_windows.go` dentro de cada pacote (padrão do
+  Go: o compilador escolhe o arquivo pelo sistema). Cada pacote tem um `_other.go` que devolve
+  `ErrUnsupported`, então tudo compila e testa também no Linux (onde roda o detector de
+  concorrência do CI). Portar para outro sistema = escrever o arquivo daquele sistema.
+  *(Decisão da Fase 2: substitui a pasta única `platform/windows`, que misturaria assuntos
+  diferentes num só pacote.)*
 - Nova sonda = novo arquivo em `probe/`, sem alterar o agendador (princípio aberto/fechado).
 
 ### Modelo de dados (rascunho)
@@ -381,7 +387,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 |---|---|
 | **0 — Spike** ✅ | Experimentos no Windows do dono: latência sem admin, gateway, velocidade (Cloudflare), Wi-Fi, conexão limitada, bandeja e notificação. Tudo viável; resultado na seção 3. |
 | **1 — Fundação** ✅ | Repositório, módulo Go, CLI (`run`, `version`, `help`), configuração validada, logs com rotação, SQLite com migrações e verificação de integridade, testes, lint, `check.ps1`, CI, Dependabot. Conceito visual do painel. |
-| **2 — Sondas leves** | Latência (gateway + internet), jitter, perda, quedas, Wi-Fi, tipo de rede. Comando `avanet probe` para rodar no terminal e ver o resultado. |
+| **2 — Sondas leves** ✅ | Latência até o roteador e 3 alvos (Cloudflare, Google, Quad9) em paralelo, com mediana, jitter e perda; "latência da internet" = melhor alvo. Detector de quedas (2 rodadas seguidas sem resposta). Rede: interface realmente usada (`GetBestInterfaceEx`), gateway, tipo, conexão limitada. Wi-Fi: sinal, RSSI, canal, faixa (pela frequência do ponto de acesso) e padrão. Comando `avanet probe`. Gravação no banco fica com o agente (Fase 4). |
 | **3 — Velocidade** | Teste de download/upload com tamanho crescente, orçamento de dados, rede móvel desligada por padrão, detecção de uso local. |
 | **4 — Agente** | Bandeja, agendador por perfil, gatilho adaptativo, iniciar com o Windows, instância única, heartbeat/cobertura. |
 | **5 — Relatório diário** | Análise do dia, relatório às 8h, recuperação ao ligar, notificação. |
