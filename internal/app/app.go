@@ -53,6 +53,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 	switch command {
 	case "run":
 		err = runAgent(ctx, rest, env)
+	case "probe":
+		err = runProbe(ctx, rest, env)
 	case "version":
 		err = printVersion(rest, env)
 	case "help", "-h", "-help", "--help":
@@ -64,6 +66,9 @@ func Main(ctx context.Context, args []string, env Env) int {
 
 	switch {
 	case err == nil:
+		return ExitOK
+	case ctx.Err() != nil && errors.Is(err, ctx.Err()):
+		// Stopped by Ctrl+C or Windows shutting down: a normal exit.
 		return ExitOK
 	case errors.Is(err, errUsage):
 		fmt.Fprintf(env.Stderr, "erro: %v\n\n", err)
@@ -83,6 +88,8 @@ Uso:
 
 Comandos:
   run        inicia o monitoramento (padrão quando nenhum comando é informado)
+  probe      diagnóstico rápido: conexão, Wi-Fi e latência agora
+             -n N  pacotes por alvo (padrão 10)
   version    mostra a versão
   help       mostra esta ajuda
 

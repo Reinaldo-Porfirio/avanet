@@ -20,6 +20,7 @@ Requisitos: [Go](https://go.dev/dl/) (versão do `go.mod`) e Git.
 
 ```powershell
 go run ./cmd/avanet            # inicia o agente (Ctrl+C para sair)
+go run ./cmd/avanet probe      # diagnóstico rápido: conexão, Wi-Fi e latência agora
 go run ./cmd/avanet version
 go test ./...
 .\scripts\check.ps1            # todas as verificações do CI (rode antes de cada commit)
@@ -38,6 +39,10 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 | `cmd/avanet` | ponto de entrada; só monta o contexto e chama `internal/app` |
 | `internal/app` | linha de comando e ligação entre os pacotes |
 | `internal/config` | configuração do processo, validada na inicialização |
+| `internal/domain` | tipos e regras puras: estatísticas de latência, rede, Wi-Fi, quedas |
+| `internal/netinfo` | interface usada para a internet, roteador, conexão limitada |
+| `internal/wifi` | estado do Wi-Fi pela API nativa do Windows |
+| `internal/probe` | sondas de medição (latência) |
 | `internal/logging` | logs JSON com rotação por tamanho |
 | `internal/storage` | SQLite: abertura segura, verificação de integridade, migrações |
 | `spikes/` | experimentos da Fase 0 (descartáveis, guardados como registro de decisão) |
