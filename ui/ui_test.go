@@ -4,12 +4,13 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// allowedURLPrefixes are the only absolute URLs the panel may mention: the
-// SVG namespace identifiers, which browsers never fetch.
+// svgNamespace is the only absolute URL the panel may mention: an identifier
+// that browsers never fetch.
 const svgNamespace = "http://www.w3.org/2000/svg"
 
 func readAll(t *testing.T) map[string]string {
@@ -36,6 +37,9 @@ func readAll(t *testing.T) map[string]string {
 func TestPanelLoadsNothingFromTheInternet(t *testing.T) {
 	external := regexp.MustCompile(`https?://|//[a-z0-9.-]+\.[a-z]{2,}/`)
 	for name, content := range readAll(t) {
+		if !slices.Contains([]string{".html", ".css", ".js"}, path.Ext(name)) {
+			continue // fonts and their license texts are never executed or fetched from
+		}
 		for line := range strings.Lines(strings.ReplaceAll(content, svgNamespace, "")) {
 			if external.MatchString(line) {
 				t.Errorf("%s points outside the computer: %s", name, strings.TrimSpace(line))
@@ -72,10 +76,10 @@ func TestPageHasNoInlineCode(t *testing.T) {
 
 func TestLocalReferencesExist(t *testing.T) {
 	files := readAll(t)
-	reference := regexp.MustCompile(`(?:src|href)="([a-z0-9.-]+\.[a-z0-9]+)"|from "\./([a-z0-9.-]+\.js)"`)
+	reference := regexp.MustCompile(`(?:src|href)="([a-z0-9.-]+\.[a-z0-9]+)"|from "\./([a-z0-9.-]+\.js)"|url\("([a-z0-9./-]+)"\)`)
 	for name, content := range files {
 		for _, match := range reference.FindAllStringSubmatch(content, -1) {
-			target := match[1] + match[2]
+			target := match[1] + match[2] + match[3]
 			if _, ok := files[target]; !ok {
 				t.Errorf("%s refers to %s, which does not exist", name, target)
 			}

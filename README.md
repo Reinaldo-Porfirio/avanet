@@ -76,3 +76,6 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 
 Ainda sem licença definida: o código está visível para consulta, mas todos os direitos são
 reservados ao autor. A escolha da licença está nas perguntas em aberto do planejamento.
+
+As fontes do painel (Fraunces e IBM Plex) têm licença própria, a SIL Open Font License; os textos
+estão em [`ui/static/fonts`](ui/static/fonts).

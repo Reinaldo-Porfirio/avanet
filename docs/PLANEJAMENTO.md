@@ -499,6 +499,6 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
   produto" em aberto; MIT/Apache facilita o portfólio. Decidir antes de tornar público.
 - [ ] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7.
 - [x] A notificação aparece na tela do dono? Sim, após o atalho no Menu Iniciar (Fase 5).
-- [ ] Embutir as fontes do painel (Fraunces e IBM Plex, licença OFL). Até lá, a página usa as
-  substitutas do Windows (Georgia, Segoe UI e Consolas).
+- [x] Embutir as fontes do painel (Fraunces e IBM Plex, licença OFL): feito na Fase 6, com o
+  texto das licenças em `ui/static/fonts`.
 - [ ] Testar a detecção de conexão limitada com um hotspot de celular real (Fase 3).
