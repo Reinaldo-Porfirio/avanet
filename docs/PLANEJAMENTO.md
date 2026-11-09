@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fases 0 a 5 concluídas. Próxima: Fase 6 (painel).
+> **Status:** Fases 0 a 6 concluídas. Próxima: Fase 7 (inteligência).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -170,8 +170,8 @@ No Windows, "dados móveis" significa **hotspot do celular** ou **modem USB/4G**
 O consumo fica gravado no banco (`data_usage`, por dia local e tipo de rede), então o teto
 vale mesmo reiniciando o app. Um teste só começa se o saldo do dia cobrir o **pior caso** dele,
 de modo que o teto nunca é ultrapassado; bytes de um teste interrompido também são cobrados.
-Por enquanto o teste em rede móvel exige `avanet speedtest -movel` a cada vez; a configuração
-permanente vem com o painel (Fase 6).
+A rede móvel se liga em **Ajustes** no painel, que também define os limites diários (✅ Fase 6);
+`avanet speedtest -movel` continua valendo para um teste avulso.
 
 - **Detecção de rede móvel:** usar a marcação de "conexão limitada" do Windows
   (`INetworkCostManager`, validado na Fase 0) e o tipo do adaptador. O usuário também pode
@@ -332,8 +332,8 @@ avanet/
     storage/               # ✅ SQLite: migrações, medições, sessões, configurações
     notify/                # ✅ notificação do Windows e atalho no Menu Iniciar que a torna visível
     wincom/                # ✅ acesso ao COM do Windows (atalho, conexão limitada)
-    web/                   # servidor local, API JSON, segurança (token, Host)
-  ui/                      # painel: HTML/CSS/JS + biblioteca de gráficos (embutido no build)
+    web/                   # ✅ servidor local, API JSON, segurança (link único, sessão, Host, origem)
+  ui/                      # ✅ painel: HTML/CSS/JS sem framework, gráficos em SVG (embutido no build)
   docs/
   spikes/                  # experimentos da Fase 0, guardados como registro de decisão
   .github/workflows/       # CI: build, lint, testes, vulnerabilidades (runner Windows)
@@ -362,7 +362,7 @@ Durações em microssegundos inteiros (`_us`), velocidades em Mbps (`REAL`).
 | `outages` ✅ | network_id, started_ms, ended_ms (NULL enquanto dura) |
 | `agent_sessions` ✅ | started_ms, last_ms — períodos contínuos de execução (cobertura) |
 | `data_usage` ✅ | day (YYYY-MM-DD local), data_class (fixed/mobile), bytes — migração 0002 |
-| `settings` ✅ | key, value (`profile` na Fase 4) |
+| `settings` ✅ | key, value (`profile` na Fase 4; orçamento, rede móvel e plano contratado na Fase 6). Valor danificado volta ao padrão e é registrado no log, sem impedir o monitoramento |
 | `daily_reports` ✅ | day, profile, version, summary_json, generated_at_ms, notified_at_ms — migração 0004 |
 
 Volume: com o perfil Completo, ~5.800 linhas de latência por dia (estimativa: ~200 MB por ano
@@ -429,15 +429,26 @@ O que impede que uma alteração futura quebre o app em silêncio:
 
 ### Segurança e privacidade
 - **Sem privilégio de administrador.** Roda como usuário comum.
-- **Servidor local só em `127.0.0.1`**, porta aleatória, **token secreto** na URL aberta pela
-  bandeja. Toda requisição sem token é recusada. Também valida o cabeçalho `Host` (contra *DNS
-  rebinding*), não usa CORS e manda CSP restritiva no painel.
+- **Servidor local só em `127.0.0.1`**, porta aleatória. ✅ Fase 6:
+  - A bandeja abre um **link de uso único**, válido por 1 minuto, que vira um **cookie de sessão**
+    (`HttpOnly`, `SameSite=Strict`). O histórico do navegador guarda só um link já sem valor;
+    a sessão muda a cada execução do agente. Toda requisição sem sessão é recusada, inclusive
+    a dos arquivos da página.
+  - Valida o cabeçalho `Host` (contra *DNS rebinding*) e exige `Origin` igual ao do painel em
+    tudo que altera dados. Sem CORS.
+  - CSP sem `unsafe-*`: só arquivos do próprio servidor. A página nunca monta HTML a partir de
+    dados (o nome de uma rede Wi-Fi é escolhido por quem controla o roteador), e um teste
+    automático garante isso.
+  - Corpo das requisições limitado e validado no servidor; erros internos só no log.
 - **Destinos de rede fixos** (allowlist): o app só conversa com os servidores de teste e os alvos
   de latência configurados no código, sempre via HTTPS com verificação de certificado.
 - **Comandos do sistema** (se algum for necessário) chamados com caminho absoluto e argumentos
   fixos, nunca por shell e nunca com texto vindo de fora.
 - **Privacidade:** nada sai do computador além do tráfego dos próprios testes. Sem telemetria.
-  **O IP público não é armazenado.** O usuário pode apagar todo o histórico pela interface.
+  **O IP público não é armazenado.** O usuário pode apagar todo o histórico pela interface
+  (✅ Fase 6, com confirmação digitada). O arquivo do banco é compactado em seguida, para os
+  dados não continuarem legíveis no espaço livre. Ficam os ajustes e o consumo de dados de hoje,
+  sem o qual apagar o histórico também zeraria o limite diário.
 - Dependências fixadas, Dependabot, `govulncheck` e `gitleaks` no `check.ps1` e no CI.
 - DLLs do Windows carregadas só da pasta `System32` (`NewLazySystemDLL`), contra sequestro de DLL.
 
@@ -461,7 +472,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 | **3 — Velocidade** ✅ | Download/upload em degraus contra a Cloudflare, com correção da aceleração do TCP (download) e relógio do servidor (upload); latência pelo handshake TCP; orçamento diário gravado no banco; rede móvel bloqueada sem consentimento; detecção de uso local. Comando `avanet speedtest [-movel]`. Achados na seção 3. |
 | **4 — Agente** ✅ | Agente que mede no intervalo do perfil e grava tudo (latência, Wi-Fi, velocidade, quedas, sessões); agenda dos testes que espalha o orçamento; teste extra quando a latência piora; suspensão não vira queda; bandeja com ícone colorido pela qualidade e "Testar velocidade agora"; `avanetw.exe` sem janela; iniciar com o Windows; instância única. Comandos `run [-tray]`, `status`, `profile`, `autostart`. |
 | **5 — Relatório diário** ✅ | Análise do dia com notas por perfil, faixas de horário, partes do dia "como previsão do tempo", diagnóstico e manchete em português; relatório às 8h com recuperação ao ligar; notificação do Windows; limpeza de dados brutos após 90 dias. Comando `avanet report [ontem\|hoje\|AAAA-MM-DD]`. |
-| **6 — Painel** | Servidor local seguro, tela inicial (status agora), aba Relatórios com gráficos, escolha de perfil com descrições, configurações (orçamento, rede móvel, plano contratado). |
+| **6 — Painel** ✅ | Servidor local seguro; "Abrir painel" na bandeja; aba Agora (situação atual, caminho até a internet, relógio de hoje, teste manual); aba Relatórios com o boletim, gráficos e tabela hora a hora; aba Ajustes (perfil, orçamento, rede móvel, plano contratado, iniciar com o Windows, apagar histórico), aplicados **sem reiniciar** o agente. Temas claro e escuro. |
 | **7 — Inteligência** | Padrões de 3+ dias com nível de confiança, comparação com o plano contratado (Anatel). |
 | **8 — Portfólio** | README com prints e diagrama, release no GitHub, documento de arquitetura, repositório público. |
 
@@ -488,4 +499,6 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
   produto" em aberto; MIT/Apache facilita o portfólio. Decidir antes de tornar público.
 - [ ] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7.
 - [x] A notificação aparece na tela do dono? Sim, após o atalho no Menu Iniciar (Fase 5).
+- [x] Embutir as fontes do painel (Fraunces e IBM Plex, licença OFL): feito na Fase 6, com o
+  texto das licenças em `ui/static/fonts`.
 - [ ] Testar a detecção de conexão limitada com um hotspot de celular real (Fase 3).

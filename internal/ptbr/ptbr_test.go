@@ -24,6 +24,11 @@ func TestFormats(t *testing.T) {
 		{Count(1, "teste", "testes"), "1 teste"},
 		{Count(0, "teste", "testes"), "0 testes"},
 		{Count(15, "teste", "testes"), "15 testes"},
+		{Interval(time.Minute), "1 minuto"},
+		{Interval(5 * time.Minute), "5 minutos"},
+		{Interval(time.Hour), "1 hora"},
+		{Interval(3 * time.Hour), "3 horas"},
+		{Interval(90 * time.Minute), "1h30"},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

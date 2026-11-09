@@ -25,6 +25,7 @@ import (
 	"github.com/Reinaldo-Porfirio/avanet/internal/report"
 	"github.com/Reinaldo-Porfirio/avanet/internal/storage"
 	"github.com/Reinaldo-Porfirio/avanet/internal/tray"
+	"github.com/Reinaldo-Porfirio/avanet/internal/web"
 	"github.com/Reinaldo-Porfirio/avanet/internal/wifi"
 )
 
@@ -77,10 +78,14 @@ func runAgent(ctx context.Context, args []string, env Env) (err error) {
 		}
 	}()
 
-	profile, err := loadProfile(ctx, db, logger)
+	prefs, invalid, err := db.Preferences(ctx)
 	if err != nil {
 		return err
 	}
+	if len(invalid) > 0 {
+		logger.Warn("invalid stored settings replaced by defaults", "keys", invalid)
+	}
+	profile, _ := domain.ProfileByID(prefs.Profile) // Preferences only returns known profiles
 	if err := setupNotifications(ctx); err != nil && ctx.Err() == nil {
 		logger.Warn("notifications will not be displayed", "error", err)
 	}
@@ -93,23 +98,32 @@ func runAgent(ctx context.Context, args []string, env Env) (err error) {
 	if !*withTray {
 		agentCfg.OnRound = consolePrinter(env.Stdout)
 	}
-	ag, err := agent.New(&agentCfg, realSources(logger, db), db)
+	ag, err := agent.New(&agentCfg, realSources(logger, db, prefs.Budget()), db)
 	if err != nil {
 		return err
 	}
 
+	panel, stopPanel := startPanel(ctx, &web.Deps{
+		Agent: ag, Reports: reports, Store: db, Autostart: autostartControl{}, Logger: logger,
+	}, logger)
+	defer stopPanel() // deferred after the database's Close, so it runs first
+
 	logger.Info("agent started", "version", buildinfo.Version(), "data_dir", cfg.DataDir, "tray", *withTray)
 	if !*withTray {
-		fmt.Fprintf(env.Stdout, "AvaNet %s em execução (perfil %s). Dados em %s. Ctrl+C para sair.\n\n",
+		fmt.Fprintf(env.Stdout, "AvaNet %s em execução (perfil %s). Dados em %s. Ctrl+C para sair.\n",
 			buildinfo.Version(), profile.Name, cfg.DataDir)
+		if panel != nil {
+			fmt.Fprintf(env.Stdout, "Painel: %s\n(este link funciona uma única vez)\n", panel.OpenURL(consoleLinkTTL))
+		}
+		fmt.Fprintln(env.Stdout)
 		return ag.Run(ctx)
 	}
-	return runWithTray(ctx, ag, logger)
+	return runWithTray(ctx, ag, logger, panelOpener(panel, logger))
 }
 
 // runWithTray runs the agent in the background while the tray owns this
 // goroutine; whichever stops first (agent error, "Sair", Ctrl+C) stops both.
-func runWithTray(ctx context.Context, ag *agent.Agent, logger *slog.Logger) error {
+func runWithTray(ctx context.Context, ag *agent.Agent, logger *slog.Logger, openPanel func()) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -120,7 +134,7 @@ func runWithTray(ctx context.Context, ag *agent.Agent, logger *slog.Logger) erro
 		cancel() // close the tray if the agent stops on its own
 	})
 
-	if tray.Run(ctx, ag, logger) {
+	if tray.Run(ctx, ag, logger, openPanel) {
 		logger.Info("quit requested from the tray")
 	}
 	cancel()
@@ -128,15 +142,13 @@ func runWithTray(ctx context.Context, ag *agent.Agent, logger *slog.Logger) erro
 	return agentErr
 }
 
-func realSources(logger *slog.Logger, db *storage.DB) agent.Sources {
+func realSources(logger *slog.Logger, db *storage.DB, budget domain.DataBudget) agent.Sources {
 	reader := netinfo.Reader{Logger: logger}
 	return agent.Sources{
 		Network: reader.Current,
 		WiFi:    wifi.Current,
 		Latency: probe.Latency{Echoer: probe.ICMPEchoer{}, Options: probe.DefaultEchoOptions}.Run,
-		// Mobile data stays off for the agent until the panel (Phase 6) lets
-		// the user turn it on.
-		Speed: newSpeedRunner(reader, db, false),
+		Speed:   newSpeedRunner(reader, db, budget),
 	}
 }
 

@@ -4,7 +4,7 @@ Monitor de qualidade de internet para Windows. Fica em segundo plano medindo lat
 download e upload, e todo dia às 8h entrega um relatório do dia anterior: melhores e piores horários,
 se o problema está no seu Wi-Fi ou na operadora e, com alguns dias de dados, os padrões da sua conexão.
 
-> **Status:** em desenvolvimento. Fases 0 a 5 concluídas: monitoramento em segundo plano e boletim diário no terminal.
+> **Status:** em desenvolvimento. Fases 0 a 6 concluídas: monitoramento em segundo plano, boletim diário e painel local.
 > Planejamento completo em [docs/PLANEJAMENTO.md](docs/PLANEJAMENTO.md).
 
 ## Princípios
@@ -19,7 +19,7 @@ se o problema está no seu Wi-Fi ou na operadora e, com alguns dias de dados, os
 Requisitos: [Go](https://go.dev/dl/) (versão do `go.mod`) e Git.
 
 ```powershell
-go run ./cmd/avanet run        # monitora e escreve uma linha por medição (Ctrl+C para sair)
+go run ./cmd/avanet run        # monitora, mostra o link do painel e uma linha por medição (Ctrl+C para sair)
 go run ./cmd/avanet status     # resumo de hoje
 go run ./cmd/avanet report     # boletim de ontem ("hoje" ou AAAA-MM-DD também valem)
 go run ./cmd/avanet probe      # diagnóstico rápido: conexão, Wi-Fi e latência agora
@@ -40,7 +40,8 @@ go build -trimpath -ldflags "-H=windowsgui" -o "$dest\avanetw.exe" ./cmd/avanetw
 Start-Process "$dest\avanetw.exe"   # inicia agora, com o ícone perto do relógio
 ```
 
-`avanetw.exe` é a versão sem janela (como `pythonw.exe`): só o ícone na bandeja.
+`avanetw.exe` é a versão sem janela (como `pythonw.exe`): só o ícone na bandeja. O painel abre em
+**Abrir painel**, no menu desse ícone.
 
 Para usar uma pasta de dados separada durante o desenvolvimento:
 
@@ -58,6 +59,7 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 | `internal/agent` | monitor em segundo plano: rodadas, agenda dos testes, quedas, sessões |
 | `internal/analysis`, `internal/report` | análise do dia e boletim das 8h |
 | `internal/notify` | notificação do Windows |
+| `internal/web`, `ui` | servidor do painel, só em 127.0.0.1, e os arquivos da página |
 | `internal/tray` | ícone na bandeja, colorido pela qualidade da conexão |
 | `internal/autostart`, `internal/instance` | iniciar com o Windows; uma instância por vez |
 | `internal/ptbr` | números no formato brasileiro |
@@ -74,3 +76,6 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 
 Ainda sem licença definida: o código está visível para consulta, mas todos os direitos são
 reservados ao autor. A escolha da licença está nas perguntas em aberto do planejamento.
+
+As fontes do painel (Fraunces e IBM Plex) têm licença própria, a SIL Open Font License; os textos
+estão em [`ui/static/fonts`](ui/static/fonts).

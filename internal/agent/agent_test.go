@@ -65,6 +65,8 @@ type scenario struct {
 	sleepBefore map[int]time.Duration // round index -> sleep during the wait before it
 	reports     ReportTicker          // nil: no reports
 	onStart     func(a *Agent)        // called before Run
+	onWait      func(a *Agent, n int) // called during the n-th wait between rounds
+	profile     domain.ProfileID      // empty: Completo
 }
 
 type runResult struct {
@@ -82,7 +84,11 @@ func run(t *testing.T, sc scenario) runResult {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var created *Agent
 	clock.onWait = func(n int) {
+		if sc.onWait != nil {
+			sc.onWait(created, n)
+		}
 		if n == sc.rounds {
 			cancel() // all scripted rounds done: stop while waiting
 		}
@@ -112,11 +118,16 @@ func run(t *testing.T, sc scenario) runResult {
 		},
 		Speed: speed,
 	}
-	profile, _ := domain.ProfileByID(domain.ProfileComplete) // a round per minute
+	profileID := sc.profile
+	if profileID == "" {
+		profileID = domain.ProfileComplete // a round per minute
+	}
+	profile, _ := domain.ProfileByID(profileID)
 	a, err := New(&Config{Profile: profile, Logger: discardLogger(), Clock: clock, Reports: sc.reports}, src, db)
 	if err != nil {
 		t.Fatal(err)
 	}
+	created = a
 	if sc.onStart != nil {
 		sc.onStart(a)
 	}
@@ -221,6 +232,70 @@ func TestAgentRunsRequestedSpeedTest(t *testing.T) {
 	}
 	if res.status.LastSpeed == nil {
 		t.Error("status must expose the latest speed test")
+	}
+}
+
+func TestAgentAppliesSettingsWithoutRestarting(t *testing.T) {
+	gaming, _ := domain.ProfileByID(domain.ProfileGaming)
+	budget := domain.DefaultDataBudget()
+	budget.MobileEnabled = true
+	var agent *Agent
+	run(t, scenario{rounds: 2, onStart: func(a *Agent) {
+		agent = a
+		if err := a.ApplySettings(&gaming, budget); err != nil {
+			t.Fatal(err)
+		}
+	}})
+	if agent.cfg.Profile.ID != domain.ProfileGaming || !agent.src.Speed.Budget.MobileEnabled {
+		t.Errorf("profile %s, budget %+v", agent.cfg.Profile.ID, agent.src.Speed.Budget)
+	}
+}
+
+// Moving to a shorter interval must not look like the computer having slept:
+// the round right after the change still arrives on the old schedule.
+func TestShorterIntervalIsNotMistakenForSleep(t *testing.T) {
+	complete, _ := domain.ProfileByID(domain.ProfileComplete)
+	res := run(t, scenario{
+		rounds: 6, profile: domain.ProfileBasic, // 5 minutes between rounds
+		onWait: func(a *Agent, n int) {
+			if n == 2 {
+				if err := a.ApplySettings(&complete, domain.DefaultDataBudget()); err != nil {
+					t.Error(err)
+				}
+			}
+		},
+	})
+	if got := res.db.count("SELECT COUNT(*) FROM agent_sessions"); got != 1 {
+		t.Errorf("%d sessions, want 1: the change was taken for a sleep", got)
+	}
+	const lastGap = `SELECT (SELECT MAX(at_ms) FROM latency_samples) -
+		(SELECT MAX(at_ms) FROM latency_samples WHERE at_ms < (SELECT MAX(at_ms) FROM latency_samples))`
+	if got := res.db.count(lastGap); got != time.Minute.Milliseconds() {
+		t.Errorf("rounds %d ms apart, want the new interval", got)
+	}
+}
+
+func TestApplySettingsRejectsInvalidValues(t *testing.T) {
+	complete, _ := domain.ProfileByID(domain.ProfileComplete)
+	var invalid, bad error
+	run(t, scenario{rounds: 1, onStart: func(a *Agent) {
+		invalid = a.ApplySettings(&domain.Profile{}, domain.DefaultDataBudget())
+		broken := domain.DefaultDataBudget()
+		broken.Fixed.DailyBytes = 1
+		bad = a.ApplySettings(&complete, broken)
+	}})
+	if invalid == nil || bad == nil {
+		t.Errorf("invalid profile: %v, invalid budget: %v", invalid, bad)
+	}
+}
+
+func TestStatusDescribesTheConnection(t *testing.T) {
+	res := run(t, scenario{rounds: 1})
+	if res.status.SSID != "Casa" || res.status.SignalPercent != 90 || !res.status.HasGateway {
+		t.Errorf("status = %+v", res.status)
+	}
+	if res.status.SpeedRunning {
+		t.Error("no speed test is running after the agent stopped")
 	}
 }
 

@@ -63,6 +63,44 @@ func (db *DB) DailyReport(ctx context.Context, day domain.Day) (StoredReport, bo
 	return r, true, nil
 }
 
+// ReportSummary is what the list of reports shows about each day.
+type ReportSummary struct {
+	Day      domain.Day
+	Grade    string
+	Headline string
+}
+
+// ReportSummaries returns the most recent stored reports, newest first.
+func (db *DB) ReportSummaries(ctx context.Context, limit int) (summaries []ReportSummary, err error) {
+	const query = `
+		SELECT day, COALESCE(json_extract(summary_json, '$.grade'), ''), COALESCE(json_extract(summary_json, '$.headline'), '')
+		FROM daily_reports ORDER BY day DESC LIMIT ?`
+	rows, err := db.sql.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list reports: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("list reports: %w", closeErr))
+		}
+	}()
+	for rows.Next() {
+		var (
+			s   ReportSummary
+			day string
+		)
+		if err := rows.Scan(&day, &s.Grade, &s.Headline); err != nil {
+			return nil, fmt.Errorf("list reports: %w", err)
+		}
+		s.Day = domain.Day(day)
+		summaries = append(summaries, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list reports: %w", err)
+	}
+	return summaries, nil
+}
+
 // MarkReportNotified records that the user was told about a day's report.
 func (db *DB) MarkReportNotified(ctx context.Context, day domain.Day, at time.Time) error {
 	res, err := db.sql.ExecContext(ctx, "UPDATE daily_reports SET notified_at_ms = ? WHERE day = ?", at.UnixMilli(), string(day))

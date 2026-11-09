@@ -37,6 +37,22 @@ func Hours(d time.Duration) string {
 	return strconv.Itoa(h) + "h" + pad2(m)
 }
 
+// Interval writes a measuring interval: "1 minuto", "3 horas", "1h30".
+func Interval(d time.Duration) string {
+	switch {
+	case d == time.Minute:
+		return "1 minuto"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + " minutos"
+	case d == time.Hour:
+		return "1 hora"
+	case d%time.Hour == 0:
+		return strconv.Itoa(int(d.Hours())) + " horas"
+	default:
+		return Hours(d)
+	}
+}
+
 func pad2(v int) string {
 	if v < 10 {
 		return "0" + strconv.Itoa(v)

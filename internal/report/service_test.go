@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +232,36 @@ func TestLoadTodayIsNeverStored(t *testing.T) {
 	}
 	if _, err := h.svc.Load(ctx, "ontem", date(5, 10, 0)); !errors.Is(err, domain.ErrInvalidSample) {
 		t.Errorf("bad day: error = %v", err)
+	}
+}
+
+func TestDaysListsStoredAndUnbuiltDays(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	now := date(9, 10, 0)
+	h.measure(date(6, 12, 0))
+	h.measure(date(7, 12, 0))
+	h.measure(date(9, 9, 0))
+	if _, err := h.svc.Load(ctx, "2026-11-06", now); err != nil { // stores it
+		t.Fatal(err)
+	}
+
+	days, err := h.svc.Days(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []domain.Day
+	for _, d := range days {
+		got = append(got, d.Day)
+	}
+	if want := []domain.Day{"2026-11-09", "2026-11-07", "2026-11-06"}; !slices.Equal(got, want) {
+		t.Fatalf("days = %v, want %v (newest first, each once)", got, want)
+	}
+	if days[2].Headline == "" || days[2].Grade == "" {
+		t.Errorf("a stored report must bring its summary: %+v", days[2])
+	}
+	if days[1].Headline != "" {
+		t.Errorf("a day not built yet has no summary: %+v", days[1])
 	}
 }
 

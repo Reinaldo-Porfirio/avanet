@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/Reinaldo-Porfirio/avanet/internal/analysis"
@@ -27,7 +29,20 @@ const (
 	retentionDays = 90
 	// retryAfter spaces out new attempts when building or notifying fails.
 	retryAfter = time.Hour
+	// maxListedReports is about two years of daily reports.
+	maxListedReports = 730
+	// recentListedDays are checked for measurements, because a day that was
+	// never turned into a report can still be opened.
+	recentListedDays = 35
 )
+
+// DayEntry is one line of the list of reports. Grade and Headline are empty
+// for a day whose report was not built yet.
+type DayEntry struct {
+	Day      domain.Day `json:"day"`
+	Grade    string     `json:"grade,omitempty"`
+	Headline string     `json:"headline,omitempty"`
+}
 
 // Store is the persistence reports need (implemented by *storage.DB).
 type Store interface {
@@ -37,6 +52,7 @@ type Store interface {
 	SaveDailyReport(ctx context.Context, r *storage.StoredReport) error
 	MarkReportNotified(ctx context.Context, day domain.Day, at time.Time) error
 	PruneRawData(ctx context.Context, before time.Time) error
+	ReportSummaries(ctx context.Context, limit int) ([]storage.ReportSummary, error)
 }
 
 // Notifier tells the user a report is ready.
@@ -44,7 +60,8 @@ type Notifier interface {
 	Notify(title, body string) error
 }
 
-// Service builds, stores and announces daily reports.
+// Service builds, stores and announces daily reports. Load and Days can be
+// called concurrently with Tick; Tick itself belongs to the agent's goroutine.
 type Service struct {
 	Store    Store
 	Notifier Notifier // may be nil for read-only use
@@ -150,6 +167,39 @@ func (s *Service) Load(ctx context.Context, day domain.Day, now time.Time) (*ana
 		return nil, analysis.ErrNoData
 	}
 	return s.build(ctx, day, from, to, now)
+}
+
+// Days lists the days that have something to show, newest first.
+func (s *Service) Days(ctx context.Context, now time.Time) ([]DayEntry, error) {
+	stored, err := s.Store.ReportSummaries(ctx, maxListedReports)
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[domain.Day]bool, len(stored))
+	entries := make([]DayEntry, 0, len(stored)+recentListedDays)
+	for _, r := range stored {
+		known[r.Day] = true
+		entries = append(entries, DayEntry{Day: r.Day, Grade: r.Grade, Headline: r.Headline})
+	}
+
+	midnight := domain.StartOfLocalDay(now)
+	for offset := range recentListedDays {
+		from := midnight.AddDate(0, 0, -offset)
+		day := domain.DayOf(from)
+		if known[day] {
+			continue
+		}
+		has, err := s.Store.HasMeasurements(ctx, from, from.AddDate(0, 0, 1))
+		if err != nil {
+			return nil, err
+		}
+		if has {
+			entries = append(entries, DayEntry{Day: day})
+		}
+	}
+	// Days are YYYY-MM-DD, so sorting the text sorts them by date.
+	slices.SortFunc(entries, func(a, b DayEntry) int { return strings.Compare(string(b.Day), string(a.Day)) })
+	return entries, nil
 }
 
 func (s *Service) loadFinished(ctx context.Context, day domain.Day, from, to, now time.Time) (*analysis.Daily, error) {

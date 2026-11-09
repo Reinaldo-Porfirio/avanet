@@ -109,18 +109,3 @@ func TestConsolePrinter(t *testing.T) {
 		t.Errorf("speed result printed %d times, want once", n)
 	}
 }
-
-func TestHumanInterval(t *testing.T) {
-	tests := map[time.Duration]string{
-		time.Minute:      "1 minuto",
-		5 * time.Minute:  "5 minutos",
-		time.Hour:        "1 hora",
-		3 * time.Hour:    "3 horas",
-		90 * time.Minute: "1h30",
-	}
-	for d, want := range tests {
-		if got := humanInterval(d); got != want {
-			t.Errorf("humanInterval(%v) = %q, want %q", d, got, want)
-		}
-	}
-}

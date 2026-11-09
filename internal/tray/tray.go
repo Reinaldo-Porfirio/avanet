@@ -25,20 +25,21 @@ type Controller interface {
 }
 
 // Run shows the tray icon until ctx is cancelled or the user chooses "Sair".
-// It reports whether the user asked to quit.
+// It reports whether the user asked to quit. openPanel is nil when the panel
+// is not available, which disables its menu item.
 //
 // Windows delivers the icon's messages to the thread that created it, so Run
 // locks itself to its OS thread for its whole duration.
-func Run(ctx context.Context, ctrl Controller, log *slog.Logger) (quitByUser bool) {
+func Run(ctx context.Context, ctrl Controller, log *slog.Logger, openPanel func()) (quitByUser bool) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
 	var byUser atomic.Bool
-	systray.Run(func() { onReady(ctx, ctrl, log, &byUser) }, func() {})
+	systray.Run(func() { onReady(ctx, ctrl, log, openPanel, &byUser) }, func() {})
 	return byUser.Load()
 }
 
-func onReady(ctx context.Context, ctrl Controller, log *slog.Logger, byUser *atomic.Bool) {
+func onReady(ctx context.Context, ctrl Controller, log *slog.Logger, openPanel func(), byUser *atomic.Bool) {
 	icons := make(map[domain.Quality][]byte, len(qualityColors))
 	for q := range qualityColors {
 		data, err := icon(q)
@@ -50,6 +51,11 @@ func onReady(ctx context.Context, ctrl Controller, log *slog.Logger, byUser *ato
 	}
 
 	systray.SetTitle("AvaNet")
+	panelItem := systray.AddMenuItem("Abrir painel", "Boletins, situação agora e ajustes")
+	if openPanel == nil {
+		panelItem.Disable()
+	}
+	systray.AddSeparator()
 	statusItem := systray.AddMenuItem("", "")
 	statusItem.Disable()
 	speedItem := systray.AddMenuItem("", "")
@@ -86,6 +92,10 @@ func onReady(ctx context.Context, ctrl Controller, log *slog.Logger, byUser *ato
 				byUser.Store(true)
 				systray.Quit()
 				return
+			case <-panelItem.ClickedCh:
+				if openPanel != nil {
+					openPanel()
+				}
 			case <-speedNow.ClickedCh:
 				ctrl.RequestSpeedTest()
 				speedItem.SetTitle("Teste de velocidade solicitado…")
