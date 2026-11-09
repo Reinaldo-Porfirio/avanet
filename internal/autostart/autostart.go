@@ -28,6 +28,11 @@ type Entry struct {
 // Default is AvaNet's real registration.
 func Default() Entry { return Entry{KeyPath: RunKey, ValueName: "AvaNet"} }
 
+// IsTemporaryBuild reports whether exe is a throwaway `go run` build.
+func IsTemporaryBuild(exe string) bool {
+	return strings.Contains(strings.ToLower(filepath.ToSlash(exe)), "/go-build")
+}
+
 // Command builds the command line stored in the registry for exe. The
 // executable must exist at a stable, absolute path: never a temporary build
 // from `go run`, which would vanish and leave a broken entry behind.
@@ -42,7 +47,7 @@ func Command(exe string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("autostart executable is a directory: %q", exe)
 	}
-	if strings.Contains(strings.ToLower(filepath.ToSlash(exe)), "/go-build") {
+	if IsTemporaryBuild(exe) {
 		return "", fmt.Errorf("refusing to register a temporary `go run` build: %q (build the executable first)", exe)
 	}
 	if strings.ContainsRune(exe, '"') {

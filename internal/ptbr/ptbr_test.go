@@ -18,6 +18,12 @@ func TestFormats(t *testing.T) {
 		{Decimal(2.4, 1), "2,4"},
 		{Hours(14*time.Hour + 5*time.Minute + 20*time.Second), "14h05"},
 		{Hours(45 * time.Minute), "0h45"},
+		{DateLong(time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)), "terça-feira, 3 de novembro"},
+		{DateLong(time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)), "domingo, 1 de março"},
+		{DateShort(time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)), "01/03"},
+		{Count(1, "teste", "testes"), "1 teste"},
+		{Count(0, "teste", "testes"), "0 testes"},
+		{Count(15, "teste", "testes"), "15 testes"},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

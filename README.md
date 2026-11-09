@@ -4,7 +4,7 @@ Monitor de qualidade de internet para Windows. Fica em segundo plano medindo lat
 download e upload, e todo dia às 8h entrega um relatório do dia anterior: melhores e piores horários,
 se o problema está no seu Wi-Fi ou na operadora e, com alguns dias de dados, os padrões da sua conexão.
 
-> **Status:** em desenvolvimento. Fases 0 a 4 concluídas: monitoramento em segundo plano com ícone na bandeja.
+> **Status:** em desenvolvimento. Fases 0 a 5 concluídas: monitoramento em segundo plano e boletim diário no terminal.
 > Planejamento completo em [docs/PLANEJAMENTO.md](docs/PLANEJAMENTO.md).
 
 ## Princípios
@@ -21,6 +21,7 @@ Requisitos: [Go](https://go.dev/dl/) (versão do `go.mod`) e Git.
 ```powershell
 go run ./cmd/avanet run        # monitora e escreve uma linha por medição (Ctrl+C para sair)
 go run ./cmd/avanet status     # resumo de hoje
+go run ./cmd/avanet report     # boletim de ontem ("hoje" ou AAAA-MM-DD também valem)
 go run ./cmd/avanet probe      # diagnóstico rápido: conexão, Wi-Fi e latência agora
 go run ./cmd/avanet speedtest  # download e upload (respeita o orçamento diário de dados)
 go run ./cmd/avanet profile    # perfis de uso; "profile jogos" escolhe um
@@ -55,6 +56,8 @@ $env:AVANET_DATA_DIR = "$env:TEMP\avanet-dev"
 | `cmd/avanetw` | a mesma coisa sem janela de console (bandeja) |
 | `internal/app` | linha de comando e ligação entre os pacotes |
 | `internal/agent` | monitor em segundo plano: rodadas, agenda dos testes, quedas, sessões |
+| `internal/analysis`, `internal/report` | análise do dia e boletim das 8h |
+| `internal/notify` | notificação do Windows |
 | `internal/tray` | ícone na bandeja, colorido pela qualidade da conexão |
 | `internal/autostart`, `internal/instance` | iniciar com o Windows; uma instância por vez |
 | `internal/ptbr` | números no formato brasileiro |

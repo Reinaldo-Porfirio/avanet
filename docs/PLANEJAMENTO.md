@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fases 0 a 4 concluídas. Próxima: Fase 5 (relatório diário).
+> **Status:** Fases 0 a 5 concluídas. Próxima: Fase 6 (painel).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -147,9 +147,13 @@ caberia (Fase 4). Intervalos de velocidade recalibrados na Fase 4 a partir dos n
 | Perfil | Bom | Ruim |
 |---|---|---|
 | Jogos online | latência < 50 ms, jitter < 15 ms, perda < 1% | latência > 100 ms ou perda > 2% |
-| Home office | upload ≥ 3 Mbps, jitter < 30 ms, perda < 1% | upload < 1,5 Mbps ou perda > 3% |
-| Streaming | download ≥ 25 Mbps (4K) / ≥ 5 Mbps (HD) | download < 5 Mbps |
-| Uso básico | download ≥ 10 Mbps, sem quedas | quedas recorrentes |
+| Home office | upload ≥ 3 Mbps, latência < 100 ms, jitter < 30 ms, perda < 1% | upload < 1,5 Mbps, latência > 250 ms ou perda > 3% |
+| Streaming | download ≥ 25 Mbps (4K) | download < 5 Mbps, latência > 500 ms ou perda > 10% |
+| Uso básico | download ≥ 10 Mbps, sem quedas | download < 2 Mbps, latência > 500 ms ou perda > 10% |
+| Completo | latência < 50 ms, jitter < 30 ms, perda < 1%, download ≥ 25, upload ≥ 3 Mbps | latência > 100 ms, perda > 3%, download < 5 ou upload < 1,5 Mbps |
+
+Em todos os perfis, uma queda breve limita a hora a "regular", e 5 minutos ou mais fora do ar a
+tornam "ruim". Métrica não medida naquela hora (os testes de velocidade são esparsos) não pesa.
 
 Todos os perfis coletam as mesmas métricas leves; o perfil muda frequência, pesos e textos.
 Os dados brutos são sempre os mesmos, então trocar de perfil recalcula relatórios antigos.
@@ -197,6 +201,26 @@ permanente vem com o painel (Fase 6).
 
 Se o PC estiver desligado às 8h, o relatório é gerado **ao ligar** e a notificação sai na hora.
 Dias sem nenhum dado não geram relatório. A aba mostra "sem dados neste dia".
+
+Regras implementadas na Fase 5:
+- **Nota da hora:** limites do perfil aplicados à mediana da hora. **Nota de um período ou do
+  dia:** "ruim" se ≥ 25% das horas monitoradas foram ruins; "regular" se houve alguma hora ruim
+  ou mais de 25% regulares; senão "boa". Uma hora ruim não condena o dia, mas impede que ele
+  seja chamado de bom.
+- **Testes de velocidade com outros programas usando a rede** aparecem no gráfico, mas ficam
+  fora das estatísticas e das notas.
+- **Notificação exige atalho no Menu Iniciar.** Testado na máquina do dono (Windows 11 23H2): sem
+  um atalho com o `AppUserModelID` do app, o Windows aceita a notificação, guarda e **não exibe**,
+  sem nenhum erro. Só o registro em `HKCU\...\AppUserModelId` (com ou sem ícone) não bastou. O
+  agente cria `AvaNet.lnk` ao iniciar, sem administrador; é também a entrada do app no Menu Iniciar.
+- **Vários dias perdidos** (PC desligado) geram todos os relatórios dos últimos 7 dias, mas só
+  o mais recente é anunciado: nada de sete notificações ao ligar.
+- **Trocar de perfil** reconstrói o relatório a partir dos dados brutos ao abri-lo, sem notificar
+  de novo. Dados brutos de latência e Wi-Fi ficam **90 dias**; depois disso vale o relatório já
+  salvo.
+- **Diagnóstico nas piores horas:** roteador lento (> 20 ms) ou perdendo pacotes (> 2%) aponta o
+  Wi-Fi/rede local; roteador bem e latência dobrada, perda ou queda aponta a operadora; resposta
+  normal com velocidade baixa aponta capacidade (plano ou outros aparelhos).
 
 ### Padrões (com 3 dias ou mais)
 
@@ -303,10 +327,11 @@ avanet/
     instance/              # ✅ instância única (mutex do Windows)
     autostart/             # ✅ iniciar com o Windows (registro HKCU\...\Run)
     tray/                  # ✅ ícone na bandeja (cor pela qualidade) e menu
-    analysis/              # agregação diária, percentis, faixas de horário, padrões, plano contratado
-    report/                # monta o relatório diário a partir da análise
+    analysis/              # ✅ análise do dia: notas, percentis, faixas, diagnóstico, texto (padrões na Fase 7)
+    report/                # ✅ relatório das 8h: gera o que falta, guarda, anuncia, limpa dados antigos
     storage/               # ✅ SQLite: migrações, medições, sessões, configurações
-    notify/                # notificação do Windows atrás de uma interface Notifier
+    notify/                # ✅ notificação do Windows e atalho no Menu Iniciar que a torna visível
+    wincom/                # ✅ acesso ao COM do Windows (atalho, conexão limitada)
     web/                   # servidor local, API JSON, segurança (token, Host)
   ui/                      # painel: HTML/CSS/JS + biblioteca de gráficos (embutido no build)
   docs/
@@ -338,10 +363,11 @@ Durações em microssegundos inteiros (`_us`), velocidades em Mbps (`REAL`).
 | `agent_sessions` ✅ | started_ms, last_ms — períodos contínuos de execução (cobertura) |
 | `data_usage` ✅ | day (YYYY-MM-DD local), data_class (fixed/mobile), bytes — migração 0002 |
 | `settings` ✅ | key, value (`profile` na Fase 4) |
-| `daily_reports` | date, profile, summary_json, generated_at, notified_at (Fase 5) |
+| `daily_reports` ✅ | day, profile, version, summary_json, generated_at_ms, notified_at_ms — migração 0004 |
 
-Volume: com o perfil Completo, ~5.800 linhas de latência por dia (alguns MB por mês). Uma
-rotina de limpeza/compactação do histórico antigo fica para quando houver relatórios (Fase 5).
+Volume: com o perfil Completo, ~5.800 linhas de latência por dia (estimativa: ~200 MB por ano
+sem limpeza). Amostras de latência e Wi-Fi com mais de 90 dias são apagadas uma vez por dia;
+relatórios, testes de velocidade e quedas ficam.
 
 Horários guardados como **inteiros em milissegundos UTC** (colunas com sufixo `_ms`):
 compactos, rápidos para consultas por intervalo e convertidos para o fuso local só na exibição
@@ -434,7 +460,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 | **2 — Sondas leves** ✅ | Latência até o roteador e 3 alvos (Cloudflare, Google, Quad9) em paralelo, com mediana, jitter e perda; "latência da internet" = melhor alvo. Detector de quedas (2 rodadas seguidas sem resposta). Rede: interface realmente usada (`GetBestInterfaceEx`), gateway, tipo, conexão limitada. Wi-Fi: sinal, RSSI, canal, faixa (pela frequência do ponto de acesso) e padrão. Comando `avanet probe`. Gravação no banco fica com o agente (Fase 4). |
 | **3 — Velocidade** ✅ | Download/upload em degraus contra a Cloudflare, com correção da aceleração do TCP (download) e relógio do servidor (upload); latência pelo handshake TCP; orçamento diário gravado no banco; rede móvel bloqueada sem consentimento; detecção de uso local. Comando `avanet speedtest [-movel]`. Achados na seção 3. |
 | **4 — Agente** ✅ | Agente que mede no intervalo do perfil e grava tudo (latência, Wi-Fi, velocidade, quedas, sessões); agenda dos testes que espalha o orçamento; teste extra quando a latência piora; suspensão não vira queda; bandeja com ícone colorido pela qualidade e "Testar velocidade agora"; `avanetw.exe` sem janela; iniciar com o Windows; instância única. Comandos `run [-tray]`, `status`, `profile`, `autostart`. |
-| **5 — Relatório diário** | Análise do dia, relatório às 8h, recuperação ao ligar, notificação. |
+| **5 — Relatório diário** ✅ | Análise do dia com notas por perfil, faixas de horário, partes do dia "como previsão do tempo", diagnóstico e manchete em português; relatório às 8h com recuperação ao ligar; notificação do Windows; limpeza de dados brutos após 90 dias. Comando `avanet report [ontem\|hoje\|AAAA-MM-DD]`. |
 | **6 — Painel** | Servidor local seguro, tela inicial (status agora), aba Relatórios com gráficos, escolha de perfil com descrições, configurações (orçamento, rede móvel, plano contratado). |
 | **7 — Inteligência** | Padrões de 3+ dias com nível de confiança, comparação com o plano contratado (Anatel). |
 | **8 — Portfólio** | README com prints e diagrama, release no GitHub, documento de arquitetura, repositório público. |
@@ -461,5 +487,5 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 - [ ] **Licença** do código. Sem licença = todos os direitos reservados, o que mantém o "talvez
   produto" em aberto; MIT/Apache facilita o portfólio. Decidir antes de tornar público.
 - [ ] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7.
-- [ ] A notificação de teste da Fase 0 apareceu na tela do dono?
+- [x] A notificação aparece na tela do dono? Sim, após o atalho no Menu Iniciar (Fase 5).
 - [ ] Testar a detecção de conexão limitada com um hotspot de celular real (Fase 3).
