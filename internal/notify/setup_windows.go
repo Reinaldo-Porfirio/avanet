@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -133,7 +132,7 @@ func shortcutMatches(link, persist, store *wincom.Object, path, target, appID st
 	if err := wincom.Check(hr, "read shortcut target"); err != nil {
 		return false, err
 	}
-	if !strings.EqualFold(windows.UTF16ToString(buffer), target) {
+	if !sameFile(windows.UTF16ToString(buffer), target) {
 		return false, nil
 	}
 
@@ -150,6 +149,21 @@ func shortcutMatches(link, persist, store *wincom.Object, path, target, appID st
 		return false, err
 	}
 	return current == appID, nil
+}
+
+// sameFile compares files, not spellings: Windows stores a shortcut's target in
+// its long form even when it was given an 8.3 path such as C:\Users\RUNNER~1.
+// A path that cannot be read is no match, so the shortcut gets rewritten.
+func sameFile(a, b string) bool {
+	infoA, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	infoB, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(infoA, infoB)
 }
 
 func writeShortcut(link, persist, store *wincom.Object, path, target, appID string) error {
