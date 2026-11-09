@@ -71,12 +71,3 @@ func TestCostFromFlags(t *testing.T) {
 		}
 	}
 }
-
-func TestFailed(t *testing.T) {
-	if failed(0) || failed(sFalse) {
-		t.Error("S_OK and S_FALSE are successes")
-	}
-	if !failed(0x80004005) { // E_FAIL
-		t.Error("E_FAIL is a failure")
-	}
-}

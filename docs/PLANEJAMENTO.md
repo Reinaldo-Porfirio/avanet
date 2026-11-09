@@ -209,6 +209,10 @@ Regras implementadas na Fase 5:
   seja chamado de bom.
 - **Testes de velocidade com outros programas usando a rede** aparecem no gráfico, mas ficam
   fora das estatísticas e das notas.
+- **Notificação exige atalho no Menu Iniciar.** Testado na máquina do dono (Windows 11 23H2): sem
+  um atalho com o `AppUserModelID` do app, o Windows aceita a notificação, guarda e **não exibe**,
+  sem nenhum erro. Só o registro em `HKCU\...\AppUserModelId` (com ou sem ícone) não bastou. O
+  agente cria `AvaNet.lnk` ao iniciar, sem administrador; é também a entrada do app no Menu Iniciar.
 - **Vários dias perdidos** (PC desligado) geram todos os relatórios dos últimos 7 dias, mas só
   o mais recente é anunciado: nada de sete notificações ao ligar.
 - **Trocar de perfil** reconstrói o relatório a partir dos dados brutos ao abri-lo, sem notificar
@@ -326,7 +330,8 @@ avanet/
     analysis/              # ✅ análise do dia: notas, percentis, faixas, diagnóstico, texto (padrões na Fase 7)
     report/                # ✅ relatório das 8h: gera o que falta, guarda, anuncia, limpa dados antigos
     storage/               # ✅ SQLite: migrações, medições, sessões, configurações
-    notify/                # ✅ notificação do Windows
+    notify/                # ✅ notificação do Windows e atalho no Menu Iniciar que a torna visível
+    wincom/                # ✅ acesso ao COM do Windows (atalho, conexão limitada)
     web/                   # servidor local, API JSON, segurança (token, Host)
   ui/                      # painel: HTML/CSS/JS + biblioteca de gráficos (embutido no build)
   docs/
@@ -482,5 +487,5 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 - [ ] **Licença** do código. Sem licença = todos os direitos reservados, o que mantém o "talvez
   produto" em aberto; MIT/Apache facilita o portfólio. Decidir antes de tornar público.
 - [ ] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7.
-- [ ] A notificação de teste da Fase 0 apareceu na tela do dono?
+- [x] A notificação aparece na tela do dono? Sim, após o atalho no Menu Iniciar (Fase 5).
 - [ ] Testar a detecção de conexão limitada com um hotspot de celular real (Fase 3).

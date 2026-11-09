@@ -1,31 +1,34 @@
 // Package notify shows notifications to the user.
+//
+// Windows keeps but does not display a toast from an application it cannot
+// identify. For a program without an installer package, what identifies it is
+// a Start Menu shortcut carrying its AppUserModelID: without one the call
+// succeeds and nothing appears (validated on Windows 11 23H2 in Phase 5, also
+// with the registry-only registration). Setup creates that shortcut.
 package notify
 
 import (
+	"errors"
 	"fmt"
-	"sync"
 
 	"git.sr.ht/~jackmordaunt/go-toast/v2"
 )
 
-// AppID is the name Windows shows on AvaNet's notifications. It is registered
-// under HKCU\SOFTWARE\Classes\AppUserModelId\<AppID>, which needs no
-// administrator rights.
-const AppID = "AvaNet"
+const (
+	// AppID is the identity Windows knows AvaNet by.
+	AppID = "AvaNet.Monitor"
+	// ShortcutName is the Start Menu entry, which also carries AppID.
+	ShortcutName = "AvaNet.lnk"
+)
 
-// Toast sends Windows toast notifications. Use a pointer: registering the
-// application happens once. On other platforms the library does nothing.
-type Toast struct {
-	once sync.Once
-	err  error
-}
+// ErrUnsupported means the platform has no Start Menu to register in.
+var ErrUnsupported = errors.New("notifications are not supported on this platform")
 
-// Notify shows a notification.
-func (t *Toast) Notify(title, body string) error {
-	t.once.Do(func() { t.err = toast.SetAppData(toast.AppData{AppID: AppID}) })
-	if t.err != nil {
-		return fmt.Errorf("register notifications: %w", t.err)
-	}
+// Toast sends Windows toast notifications.
+type Toast struct{}
+
+// Notify shows a notification. Setup must have run for it to be displayed.
+func (Toast) Notify(title, body string) error {
 	n := toast.Notification{AppID: AppID, Title: title, Body: body}
 	if err := n.Push(); err != nil {
 		return fmt.Errorf("show notification: %w", err)

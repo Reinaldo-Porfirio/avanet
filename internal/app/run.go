@@ -81,8 +81,12 @@ func runAgent(ctx context.Context, args []string, env Env) (err error) {
 	if err != nil {
 		return err
 	}
+	if err := setupNotifications(ctx); err != nil && ctx.Err() == nil {
+		logger.Warn("notifications will not be displayed", "error", err)
+	}
+
 	reports := &report.Service{
-		Store: db, Notifier: &notify.Toast{}, Logger: logger,
+		Store: db, Notifier: notify.Toast{}, Logger: logger,
 		Profile: func(ctx context.Context) (domain.Profile, error) { return loadProfile(ctx, db, logger) },
 	}
 	agentCfg := agent.Config{Profile: profile, Logger: logger, Reports: reports}

@@ -53,7 +53,10 @@ func runReport(ctx context.Context, args []string, env Env) error {
 
 		if *sendNotification {
 			title, body := report.NotificationText(daily, now)
-			return (&notify.Toast{}).Notify(title, body)
+			if err := setupNotifications(ctx); err != nil {
+				return err
+			}
+			return notify.Toast{}.Notify(title, body)
 		}
 		return nil
 	})
