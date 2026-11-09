@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Quality is a plain-language grade of a measurement.
 type Quality int
@@ -25,6 +28,21 @@ func (q Quality) String() string {
 		return "unknown"
 	}
 	return "unknown"
+}
+
+// MarshalText stores a grade by name, so saved reports stay readable and do
+// not depend on the order of the constants.
+func (q Quality) MarshalText() ([]byte, error) { return []byte(q.String()), nil }
+
+// UnmarshalText reads a grade written by MarshalText.
+func (q *Quality) UnmarshalText(text []byte) error {
+	for _, candidate := range []Quality{QualityUnknown, QualityGood, QualityFair, QualityPoor} {
+		if candidate.String() == string(text) {
+			*q = candidate
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: quality %q", ErrInvalidSample, text)
 }
 
 // Generic thresholds for the "right now" indicator (tray icon). The daily

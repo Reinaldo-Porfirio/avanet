@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Reinaldo-Porfirio/avanet/internal/domain"
 )
 
 // Decimal formats v with the given number of decimals and a decimal comma.
@@ -40,4 +42,41 @@ func pad2(v int) string {
 		return "0" + strconv.Itoa(v)
 	}
 	return strconv.Itoa(v)
+}
+
+var (
+	weekdays = [...]string{"domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"}
+	months   = [...]string{"janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+		"setembro", "outubro", "novembro", "dezembro"}
+)
+
+// DateLong renders a date for headings: "terça-feira, 3 de novembro".
+func DateLong(t time.Time) string {
+	return weekdays[t.Weekday()] + ", " + strconv.Itoa(t.Day()) + " de " + months[t.Month()-1]
+}
+
+// DateShort renders a date compactly: "03/11".
+func DateShort(t time.Time) string { return pad2(t.Day()) + "/" + pad2(int(t.Month())) }
+
+// QualityWord names a grade in plain Portuguese.
+func QualityWord(q domain.Quality) string {
+	switch q {
+	case domain.QualityGood:
+		return "boa"
+	case domain.QualityFair:
+		return "regular"
+	case domain.QualityPoor:
+		return "ruim"
+	case domain.QualityUnknown:
+		return "sem dados"
+	}
+	return "sem dados"
+}
+
+// Count writes a quantity with the right singular or plural: "1 teste", "2 testes".
+func Count(n int, singular, plural string) string {
+	if n == 1 {
+		return "1 " + singular
+	}
+	return strconv.Itoa(n) + " " + plural
 }

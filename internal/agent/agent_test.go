@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
 	"net/netip"
@@ -62,6 +63,7 @@ type scenario struct {
 	rounds      int
 	reachable   func(round int) bool  // nil: always reachable
 	sleepBefore map[int]time.Duration // round index -> sleep during the wait before it
+	reports     ReportTicker          // nil: no reports
 	onStart     func(a *Agent)        // called before Run
 }
 
@@ -111,7 +113,7 @@ func run(t *testing.T, sc scenario) runResult {
 		Speed: speed,
 	}
 	profile, _ := domain.ProfileByID(domain.ProfileComplete) // a round per minute
-	a, err := New(Config{Profile: profile, Logger: discardLogger(), Clock: clock}, src, db)
+	a, err := New(&Config{Profile: profile, Logger: discardLogger(), Clock: clock, Reports: sc.reports}, src, db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +240,7 @@ func TestAgentClosesOutageLeftOpenByPreviousRun(t *testing.T) {
 	}
 
 	speed, _ := fakeSpeed(nil, 0, 0, 0)
-	a, err := New(Config{Profile: domain.Profiles()[0], Logger: discardLogger()}, Sources{
+	a, err := New(&Config{Profile: domain.Profiles()[0], Logger: discardLogger()}, Sources{
 		Network: func() (domain.Network, error) { return domain.Network{}, nil },
 		WiFi:    func() (domain.WiFi, error) { return domain.WiFi{}, nil },
 		Latency: func(context.Context, netip.Addr, []probe.Target) (probe.Round, error) { return probe.Round{}, nil },
@@ -255,8 +257,30 @@ func TestAgentClosesOutageLeftOpenByPreviousRun(t *testing.T) {
 	}
 }
 
+type recordingTicker struct {
+	calls int
+	err   error
+}
+
+func (r *recordingTicker) Tick(context.Context, time.Time) error {
+	r.calls++
+	return r.err
+}
+
+func TestAgentTicksReportsAndSurvivesTheirFailure(t *testing.T) {
+	ticker := &recordingTicker{err: errors.New("report failed")}
+	res := run(t, scenario{rounds: 5, reports: ticker})
+
+	if ticker.calls != 5 {
+		t.Errorf("Tick called %d times, want once per round", ticker.calls)
+	}
+	if got := res.db.count("SELECT COUNT(DISTINCT at_ms) FROM latency_samples"); got != 5 {
+		t.Errorf("recorded %d rounds, want 5: a report failure must not stop the measurements", got)
+	}
+}
+
 func TestNewRejectsIncompleteConfiguration(t *testing.T) {
-	if _, err := New(Config{}, Sources{}, nil); err == nil {
+	if _, err := New(&Config{}, Sources{}, nil); err == nil {
 		t.Error("empty configuration accepted")
 	}
 }

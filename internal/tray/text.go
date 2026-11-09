@@ -2,26 +2,11 @@ package tray
 
 import (
 	"github.com/Reinaldo-Porfirio/avanet/internal/agent"
-	"github.com/Reinaldo-Porfirio/avanet/internal/domain"
 	"github.com/Reinaldo-Porfirio/avanet/internal/ptbr"
 )
 
 // maxTooltip is the Windows limit for a notification-area tooltip.
 const maxTooltip = 127
-
-func qualityWord(q domain.Quality) string {
-	switch q {
-	case domain.QualityGood:
-		return "boa"
-	case domain.QualityFair:
-		return "regular"
-	case domain.QualityPoor:
-		return "ruim"
-	case domain.QualityUnknown:
-		return "sem dados"
-	}
-	return "sem dados"
-}
 
 // statusLine summarizes the latest round in plain Portuguese.
 func statusLine(s *agent.Status) string {
@@ -33,7 +18,7 @@ func statusLine(s *agent.Status) string {
 	case s.BestTarget == "":
 		return "Internet não respondeu na última medição"
 	default:
-		return "Internet: " + ptbr.Millis(s.Internet.Median) + " · " + qualityWord(s.Quality)
+		return "Internet: " + ptbr.Millis(s.Internet.Median) + " · " + ptbr.QualityWord(s.Quality)
 	}
 }
 

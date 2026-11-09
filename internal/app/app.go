@@ -61,6 +61,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		err = runSpeedTest(ctx, rest, env)
 	case "status":
 		err = runStatus(ctx, rest, env)
+	case "report":
+		err = runReport(ctx, rest, env)
 	case "profile":
 		err = runProfile(ctx, rest, env)
 	case "autostart":
@@ -102,6 +104,8 @@ Comandos:
   run        monitora continuamente (padrão quando nenhum comando é informado)
              -tray  mostra o ícone perto do relógio em vez de escrever no terminal
   status     resumo de hoje: cobertura, última medição, último teste, dados usados
+  report     boletim de um dia: "ontem" (padrão), "hoje" ou AAAA-MM-DD
+             -notificar  também mostra a notificação do Windows (para testar)
   probe      diagnóstico rápido: conexão, Wi-Fi e latência agora
              -n N  pacotes por alvo (padrão 10)
   speedtest  mede download e upload agora (respeita o orçamento diário de dados)

@@ -27,11 +27,13 @@ type Profile struct {
 	// SpeedInterval is the desired pause between speed tests. The scheduler
 	// stretches it when the daily data budget would not last the day.
 	SpeedInterval time.Duration
+	// Limits say what counts as good or poor in the reports.
+	Limits Limits
 }
 
 // Profiles returns every profile, in the order they are offered to users.
 func Profiles() []Profile {
-	return []Profile{
+	profiles := []Profile{
 		{
 			ID: ProfileBasic, Name: "Uso básico",
 			Description:   "Navegar, redes sociais, WhatsApp e e-mail. Mede pouco e economiza recursos.",
@@ -58,13 +60,18 @@ func Profiles() []Profile {
 			LightInterval: time.Minute, SpeedInterval: time.Hour,
 		},
 	}
+	for i := range profiles {
+		profiles[i].Limits = limitsFor(profiles[i].ID)
+	}
+	return profiles
 }
 
 // ProfileByID finds a profile.
 func ProfileByID(id ProfileID) (Profile, bool) {
-	for _, p := range Profiles() {
-		if p.ID == id {
-			return p, true
+	profiles := Profiles()
+	for i := range profiles {
+		if profiles[i].ID == id {
+			return profiles[i], true
 		}
 	}
 	return Profile{}, false

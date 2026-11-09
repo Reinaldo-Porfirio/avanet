@@ -70,6 +70,14 @@ type Config struct {
 	// OnRound, if set, receives the status after every round (the console
 	// mode prints it). It runs on the agent's goroutine and must be quick.
 	OnRound func(Status)
+	// Reports, if set, is told the time after every round so it can do its
+	// daily work when due.
+	Reports ReportTicker
+}
+
+// ReportTicker does the daily report work when it is due.
+type ReportTicker interface {
+	Tick(ctx context.Context, now time.Time) error
 }
 
 // Status is a snapshot of the latest measurements, for the tray.
@@ -108,7 +116,7 @@ type Agent struct {
 }
 
 // New validates the configuration and returns an agent ready to Run.
-func New(cfg Config, src Sources, store Store) (*Agent, error) {
+func New(cfg *Config, src Sources, store Store) (*Agent, error) {
 	switch {
 	case cfg.Profile.LightInterval <= 0 || cfg.Profile.SpeedInterval <= 0:
 		return nil, fmt.Errorf("invalid profile intervals: %+v", cfg.Profile)
@@ -135,7 +143,7 @@ func New(cfg Config, src Sources, store Store) (*Agent, error) {
 		return nil, err
 	}
 	return &Agent{
-		cfg: cfg, src: src, store: store, clock: clock, log: cfg.Logger,
+		cfg: *cfg, src: src, store: store, clock: clock, log: cfg.Logger,
 		manualSpeed: make(chan struct{}, 1),
 		outages:     outages,
 	}, nil
@@ -272,6 +280,12 @@ func (a *Agent) round(ctx context.Context) error {
 	}
 	if a.cfg.OnRound != nil {
 		a.cfg.OnRound(a.Status())
+	}
+	if a.cfg.Reports != nil {
+		// A report problem must never stop the measurements.
+		if err := a.cfg.Reports.Tick(ctx, a.clock.Now()); err != nil && ctx.Err() == nil {
+			a.log.Error("daily report failed", "error", err)
+		}
 	}
 	return nil
 }

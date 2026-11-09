@@ -19,8 +19,10 @@ import (
 	"github.com/Reinaldo-Porfirio/avanet/internal/instance"
 	"github.com/Reinaldo-Porfirio/avanet/internal/logging"
 	"github.com/Reinaldo-Porfirio/avanet/internal/netinfo"
+	"github.com/Reinaldo-Porfirio/avanet/internal/notify"
 	"github.com/Reinaldo-Porfirio/avanet/internal/probe"
 	"github.com/Reinaldo-Porfirio/avanet/internal/ptbr"
+	"github.com/Reinaldo-Porfirio/avanet/internal/report"
 	"github.com/Reinaldo-Porfirio/avanet/internal/storage"
 	"github.com/Reinaldo-Porfirio/avanet/internal/tray"
 	"github.com/Reinaldo-Porfirio/avanet/internal/wifi"
@@ -79,11 +81,15 @@ func runAgent(ctx context.Context, args []string, env Env) (err error) {
 	if err != nil {
 		return err
 	}
-	agentCfg := agent.Config{Profile: profile, Logger: logger}
+	reports := &report.Service{
+		Store: db, Notifier: &notify.Toast{}, Logger: logger,
+		Profile: func(ctx context.Context) (domain.Profile, error) { return loadProfile(ctx, db, logger) },
+	}
+	agentCfg := agent.Config{Profile: profile, Logger: logger, Reports: reports}
 	if !*withTray {
 		agentCfg.OnRound = consolePrinter(env.Stdout)
 	}
-	ag, err := agent.New(agentCfg, realSources(logger, db), db)
+	ag, err := agent.New(&agentCfg, realSources(logger, db), db)
 	if err != nil {
 		return err
 	}

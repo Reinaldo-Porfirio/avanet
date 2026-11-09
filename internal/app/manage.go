@@ -67,7 +67,9 @@ func runProfile(ctx context.Context, args []string, env Env) error {
 
 func printProfiles(w io.Writer, current domain.ProfileID) {
 	fmt.Fprintln(w, "Perfis de uso (escolha com: avanet profile <id>)")
-	for _, p := range domain.Profiles() {
+	profiles := domain.Profiles()
+	for i := range profiles {
+		p := &profiles[i]
 		marker := "  "
 		if p.ID == current {
 			marker = "▸ "
