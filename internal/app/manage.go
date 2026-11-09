@@ -77,23 +77,7 @@ func printProfiles(w io.Writer, current domain.ProfileID) {
 		fmt.Fprintf(w, "\n%s%s (%s)\n", marker, p.Name, p.ID)
 		fmt.Fprintf(w, "    %s\n", p.Description)
 		fmt.Fprintf(w, "    Mede a cada %s; teste de velocidade a cada %s, dentro do limite de dados.\n",
-			humanInterval(p.LightInterval), humanInterval(p.SpeedInterval))
-	}
-}
-
-func humanInterval(d time.Duration) string {
-	switch {
-	case d < time.Hour && d == time.Minute:
-		return "1 minuto"
-	case d < time.Hour:
-		return fmt.Sprintf("%d minutos", int(d.Minutes()))
-	case d%time.Hour == 0:
-		if d == time.Hour {
-			return "1 hora"
-		}
-		return fmt.Sprintf("%d horas", int(d.Hours()))
-	default:
-		return ptbr.Hours(d)
+			ptbr.Interval(p.LightInterval), ptbr.Interval(p.SpeedInterval))
 	}
 }
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AvaNet</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<script src="theme.js"></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#conteudo">Ir para o conteúdo</a>
+<div class="page">
+  <header class="masthead">
+    <a class="brand" href="#/agora">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 22h6l4-15 6 21 4-10h6"/>
+      </svg>
+      AvaNet
+    </a>
+    <nav class="tabs" aria-label="Seções">
+      <a href="#/agora" data-tab="agora">Agora</a>
+      <a href="#/relatorios" data-tab="relatorios">Relatórios</a>
+      <a href="#/ajustes" data-tab="ajustes">Ajustes</a>
+    </nav>
+    <button class="theme-toggle" id="theme" type="button" aria-label="Alternar tema claro ou escuro">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+    </button>
+  </header>
+  <main id="conteudo" tabindex="-1"></main>
+</div>
+</body>
+</html>

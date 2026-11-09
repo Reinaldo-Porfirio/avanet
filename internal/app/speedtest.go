@@ -54,7 +54,13 @@ func runSpeedTest(ctx context.Context, args []string, env Env) (err error) {
 		return fmt.Errorf("read network: %w", err)
 	}
 
-	runner := newSpeedRunner(reader, db, *allowMobile)
+	prefs, _, err := db.Preferences(ctx)
+	if err != nil {
+		return err
+	}
+	budget := prefs.Budget()
+	budget.MobileEnabled = budget.MobileEnabled || *allowMobile // -movel: consent for this test
+	runner := newSpeedRunner(reader, db, budget)
 	outcome, err := runner.Measure(ctx, network, func(limits domain.TransferLimits) {
 		fmt.Fprintf(env.Stdout, "Medindo download e upload (no máximo %s de dados)...\n\n", ptbr.MB(limits.Total()))
 	})
@@ -72,11 +78,8 @@ func runSpeedTest(ctx context.Context, args []string, env Env) (err error) {
 	return nil
 }
 
-// newSpeedRunner wires the real speed test with the default budget. Mobile
-// data needs explicit consent (`-movel` here; a setting in a later phase).
-func newSpeedRunner(reader netinfo.Reader, usage agent.UsageStore, allowMobile bool) agent.SpeedRunner {
-	budget := domain.DefaultDataBudget()
-	budget.MobileEnabled = allowMobile
+// newSpeedRunner wires the real speed test with the given budget.
+func newSpeedRunner(reader netinfo.Reader, usage agent.UsageStore, budget domain.DataBudget) agent.SpeedRunner {
 	return agent.SpeedRunner{
 		Run:      probe.Speed{UserAgent: "AvaNet/" + buildinfo.Version()}.Run,
 		Counters: reader.Counters,

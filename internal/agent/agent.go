@@ -80,17 +80,30 @@ type ReportTicker interface {
 	Tick(ctx context.Context, now time.Time) error
 }
 
-// Status is a snapshot of the latest measurements, for the tray.
+// Status is a snapshot of the latest measurements, for the tray and the panel.
 type Status struct {
 	At         time.Time
 	Network    domain.Network
 	Internet   domain.LatencyStats // best internet target of the last round
 	BestTarget string
+	HasGateway bool
+	Gateway    domain.LatencyStats // the router, when HasGateway
 	Quality    domain.Quality
 	Outage     bool
-	LastSpeed  *domain.SpeedResult
+	// SSID and SignalPercent describe the Wi-Fi in use; SignalPercent is 0 on
+	// other connections.
+	SSID          string
+	SignalPercent int
+	LastSpeed     *domain.SpeedResult
+	SpeedRunning  bool
 	// SpeedNotice explains why the latest requested speed test did not run.
 	SpeedNotice string
+}
+
+// settingsUpdate is a change waiting for the agent's goroutine to apply it.
+type settingsUpdate struct {
+	profile domain.Profile
+	budget  domain.DataBudget
 }
 
 // Agent is the background monitor. Create it with New.
@@ -101,14 +114,17 @@ type Agent struct {
 	clock Clock
 	log   *slog.Logger
 
-	manualSpeed chan struct{}
+	manualSpeed     chan struct{}
+	settingsChanged chan struct{}
 
-	mu     sync.Mutex
-	status Status
+	mu      sync.Mutex
+	status  Status
+	pending *settingsUpdate
 
 	// Loop state, only touched by Run's goroutine.
 	session     int64
 	lastBeat    time.Time
+	gapInterval time.Duration // base of the sleep detection
 	outages     *domain.OutageDetector
 	outageID    int64 // open outage row, 0 if none
 	degradation domain.DegradationDetector
@@ -144,8 +160,10 @@ func New(cfg *Config, src Sources, store Store) (*Agent, error) {
 	}
 	return &Agent{
 		cfg: *cfg, src: src, store: store, clock: clock, log: cfg.Logger,
-		manualSpeed: make(chan struct{}, 1),
-		outages:     outages,
+		manualSpeed:     make(chan struct{}, 1),
+		settingsChanged: make(chan struct{}, 1),
+		gapInterval:     cfg.Profile.LightInterval,
+		outages:         outages,
 	}, nil
 }
 
@@ -164,6 +182,46 @@ func (a *Agent) RequestSpeedTest() {
 	case a.manualSpeed <- struct{}{}:
 	default:
 	}
+}
+
+// ApplySettings changes the profile and the data budget while the agent runs,
+// without restarting it. Safe for concurrent use. The change takes effect
+// before the next round, which it also brings forward.
+func (a *Agent) ApplySettings(profile *domain.Profile, budget domain.DataBudget) error {
+	if profile.LightInterval <= 0 || profile.SpeedInterval <= 0 {
+		return fmt.Errorf("invalid profile intervals: %+v", profile)
+	}
+	if err := budget.Validate(); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.pending = &settingsUpdate{profile: *profile, budget: budget}
+	a.mu.Unlock()
+
+	select {
+	case a.settingsChanged <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// applyPendingSettings runs on the agent's goroutine, between rounds, so a
+// round never sees half of a change.
+func (a *Agent) applyPendingSettings() {
+	a.mu.Lock()
+	update := a.pending
+	a.pending = nil
+	a.mu.Unlock()
+	if update == nil {
+		return
+	}
+
+	// The next round arrives on the old schedule. Judging it by a shorter new
+	// interval would mistake the normal wait for the computer having slept.
+	a.gapInterval = max(a.cfg.Profile.LightInterval, update.profile.LightInterval)
+	a.cfg.Profile = update.profile
+	a.src.Speed.Budget = update.budget
+	a.log.Info("settings applied", "profile", update.profile.ID, "mobile_enabled", update.budget.MobileEnabled)
 }
 
 // Run monitors until ctx is cancelled. It only returns an error if the agent
@@ -189,6 +247,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		"light_interval", a.cfg.Profile.LightInterval, "speed_interval", a.cfg.Profile.SpeedInterval)
 
 	for ctx.Err() == nil {
+		a.applyPendingSettings()
 		started := a.clock.Now()
 		if err := a.round(ctx); err != nil && ctx.Err() == nil {
 			a.log.Error("measurement round failed", "error", err)
@@ -205,6 +264,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 		case <-a.clock.After(max(wait, 0)):
+		case <-a.settingsChanged:
 		case <-a.manualSpeed:
 			a.runManualSpeed(ctx)
 		}
@@ -270,6 +330,10 @@ func (a *Agent) round(ctx context.Context) error {
 		if !reachable {
 			s.Quality = domain.QualityPoor
 		}
+		s.HasGateway = round.Gateway != nil
+		if s.HasGateway {
+			s.Gateway = round.Gateway.Stats
+		}
 	})
 
 	if err := a.beat(ctx, a.clock.Now()); err != nil {
@@ -293,7 +357,9 @@ func (a *Agent) round(ctx context.Context) error {
 // handleGap starts a new session after sleep or hibernation. The pause is
 // neither coverage nor an outage: an ongoing outage ends at the last beat.
 func (a *Agent) handleGap(ctx context.Context, now time.Time) error {
-	if now.Sub(a.lastBeat) <= gapFactor*a.cfg.Profile.LightInterval {
+	interval := a.gapInterval
+	a.gapInterval = a.cfg.Profile.LightInterval
+	if now.Sub(a.lastBeat) <= gapFactor*interval {
 		return nil
 	}
 	a.log.Info("monitoring gap detected (sleep or hibernation)", "since", a.lastBeat, "gap", now.Sub(a.lastBeat).Round(time.Second))
@@ -320,10 +386,11 @@ func (a *Agent) recordNetwork(ctx context.Context, network domain.Network, now t
 			a.log.Debug("wi-fi details unavailable", "error", err)
 		}
 	}
-	ssid := ""
+	ssid, signal := "", 0
 	if wifi != nil {
-		ssid = wifi.SSID
+		ssid, signal = wifi.SSID, wifi.SignalPercent
 	}
+	a.updateStatus(func(s *Status) { s.SSID, s.SignalPercent = ssid, signal })
 	id, err := a.store.EnsureNetwork(ctx, network, ssid, now)
 	if err != nil {
 		return 0, err
@@ -411,7 +478,9 @@ func (a *Agent) runManualSpeed(ctx context.Context) {
 
 func (a *Agent) runSpeedTest(ctx context.Context, network domain.Network, netID storage.NetworkID, trigger storage.SpeedTrigger) {
 	startedAt := a.clock.Now()
+	a.updateStatus(func(s *Status) { s.SpeedRunning = true })
 	out, err := a.src.Speed.Measure(ctx, network, nil)
+	a.updateStatus(func(s *Status) { s.SpeedRunning = false })
 	if trigger != storage.TriggerManual {
 		// The schedule follows the agent's clock. Even a failed attempt moves
 		// it, so a broken server is not hammered every round.

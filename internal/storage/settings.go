@@ -13,6 +13,10 @@ const (
 	SettingProfile = "profile"
 )
 
+const upsertSetting = `
+	INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
+	ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`
+
 // Setting returns a stored value and whether it exists.
 func (db *DB) Setting(ctx context.Context, key string) (value string, found bool, err error) {
 	err = db.sql.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
@@ -30,10 +34,7 @@ func (db *DB) SetSetting(ctx context.Context, key, value string, at time.Time) e
 	if key == "" {
 		return fmt.Errorf("%w: empty setting key", ErrInvalidInput)
 	}
-	const upsert = `
-		INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
-		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`
-	if _, err := db.sql.ExecContext(ctx, upsert, key, value, at.UnixMilli()); err != nil {
+	if _, err := db.sql.ExecContext(ctx, upsertSetting, key, value, at.UnixMilli()); err != nil {
 		return fmt.Errorf("write setting %q: %w", key, err)
 	}
 	return nil
