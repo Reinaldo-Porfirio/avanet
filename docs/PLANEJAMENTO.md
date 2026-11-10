@@ -1,6 +1,6 @@
 # AvaNet — Planejamento
 
-> **Status:** Fases 0 a 6 concluídas. Próxima: Fase 7 (inteligência).
+> **Status:** Fases 0 a 7 concluídas. Próxima: Fase 8 (portfólio).
 > **Criado em:** 2026-11-04 · **Última revisão:** 2026-11-04
 > Este documento é a fonte da verdade do projeto. Decisões novas entram aqui.
 
@@ -231,16 +231,41 @@ Regras implementadas na Fase 5:
 - A confiança sobe com mais dias e mais amostras por faixa. Sem cobertura mínima, o padrão não
   é mostrado.
 
-### Comparação com o plano contratado (Fase 7)
+Regras implementadas na Fase 7 (`analysis.FindPatterns`, sobre os boletins dos últimos **7 dias**
+terminados):
+- Uma hora só conta num dia se foi medida **pelo menos 3 vezes** nele.
+- Uma hora é recorrente quando foi medida em **3 dias ou mais** e se comportou igual em **80%**
+  deles: até 4 dias, todos precisam concordar; a partir de 5, um pode ser diferente.
+- Horas recorrentes seguidas formam uma faixa. Aparecem as **2 piores faixas** (regular ou ruim)
+  e a **melhor faixa** boa, se tiver 2 horas ou mais.
+- O texto compara a faixa com as horas boas dos mesmos dias: queda de velocidade (se ≥ 20%), ou
+  ping que subiu (se ≥ 1,5×). A causa provável vem do roteador nessa faixa: lento (> 20 ms)
+  aponta a casa; respondendo bem aponta a operadora.
+- **Confiança:** baixa com 3 dias, média com 4–5, alta com 6–7.
+- O painel mostra os padrões no boletim e, na aba Agora, uma **previsão** com a pior faixa.
 
-O usuário informa a velocidade contratada e o relatório compara com a referência da Anatel.
-O texto deixa claro que é uma **medição indicativa**: medir pelo Wi-Fi inclui as limitações do
-Wi-Fi, e o ideal para esse fim é o cabo.
+### Comparação com o plano contratado (Fase 7) ✅
 
-**Regra ainda não confirmada** (pesquisa da Fase 0): os 80% (média mensal) e 40% (instantânea)
-vêm do regulamento de 2011, revogado pelo **RQUAL (Resolução nº 717/2019)**. Reportagens citam
-que o RQUAL mantém a média de 80% para as grandes operadoras, mas o percentual instantâneo
-atual não foi encontrado em fonte oficial. Ler o texto da resolução antes da Fase 7.
+O usuário informa a velocidade contratada em Ajustes, e o boletim compara os **últimos 30 dias**
+com ela (`analysis.ComparePlan`): média e menor teste, em Mbps e em % do plano, com download e
+upload separados. Testes feitos com outros programas usando a rede ficam de fora. Só há
+veredito com **10 testes em 3 dias diferentes** ou mais. O texto deixa claro que é uma
+**medição indicativa** e avisa quando a maioria dos testes foi pelo Wi-Fi (o ideal é o cabo) ou
+quando algum teste chegou ao limite de dados (plano rápido pode ser subestimado).
+
+**Pesquisa da regra (2026-11-10).** A referência usada é **80% na média e 40% no mínimo**, sempre
+chamada de *referência*, nunca de regra legal:
+- A cartilha oficial "Anatel Explica – Velocidade de Internet" (edição 3, sem data) diz que as
+  prestadoras com mais de 50 mil assinantes devem garantir no mínimo 40% da velocidade contratada
+  e média mensal de 80%, e indica o medidor brasilbandalarga.com.br.
+- Esses números vêm da Resolução 574/2011, **revogada pelo RQUAL** (Resolução 717/2019, art. 16).
+  O RQUAL mede a qualidade de forma coletiva e deixa os critérios (inclusive o de descumprimento
+  individual) para o Manual Operacional e o Documento de Valores de Referência. Não foi possível
+  ler esses documentos: o site da Anatel exige CAPTCHA, e fontes secundárias citam valores de
+  corte fixos (5/1 e 25/5 Mbps), não percentuais.
+- A Resolução 792/2026 ("guilhotina regulatória", efeitos em 14/11/2026) revoga só artigos de
+  transição da 717/2019; o artigo que aprova o RQUAL continua valendo.
+- Conclusão: o painel orienta, para reclamar, o medidor oficial da Anatel, de preferência com cabo.
 
 ### Direção visual do painel: "o boletim da sua internet"
 
@@ -473,7 +498,7 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 | **4 — Agente** ✅ | Agente que mede no intervalo do perfil e grava tudo (latência, Wi-Fi, velocidade, quedas, sessões); agenda dos testes que espalha o orçamento; teste extra quando a latência piora; suspensão não vira queda; bandeja com ícone colorido pela qualidade e "Testar velocidade agora"; `avanetw.exe` sem janela; iniciar com o Windows; instância única. Comandos `run [-tray]`, `status`, `profile`, `autostart`. |
 | **5 — Relatório diário** ✅ | Análise do dia com notas por perfil, faixas de horário, partes do dia "como previsão do tempo", diagnóstico e manchete em português; relatório às 8h com recuperação ao ligar; notificação do Windows; limpeza de dados brutos após 90 dias. Comando `avanet report [ontem\|hoje\|AAAA-MM-DD]`. |
 | **6 — Painel** ✅ | Servidor local seguro; "Abrir painel" na bandeja; aba Agora (situação atual, caminho até a internet, relógio de hoje, teste manual); aba Relatórios com o boletim, gráficos e tabela hora a hora; aba Ajustes (perfil, orçamento, rede móvel, plano contratado, iniciar com o Windows, apagar histórico), aplicados **sem reiniciar** o agente. Temas claro e escuro. |
-| **7 — Inteligência** | Padrões de 3+ dias com nível de confiança, comparação com o plano contratado (Anatel). |
+| **7 — Inteligência** ✅ | Padrões dos últimos 7 dias com nível de confiança, previsão na aba Agora, comparação dos últimos 30 dias com o plano contratado usando a referência da Anatel (80% na média, 40% no mínimo) e avisos sobre Wi-Fi e testes insuficientes. Boletim na versão 2 (tipo de conexão e testes no limite de dados). |
 | **8 — Portfólio** | README com prints e diagrama, release no GitHub, documento de arquitetura, repositório público. |
 
 ## 13. Backlog de baixa probabilidade
@@ -497,7 +522,8 @@ erro (`if err != nil`) → interfaces → goroutines e canais (as sondas rodam e
 - [ ] Repositório público desde o início ou privado até a Fase 8?
 - [ ] **Licença** do código. Sem licença = todos os direitos reservados, o que mantém o "talvez
   produto" em aberto; MIT/Apache facilita o portfólio. Decidir antes de tornar público.
-- [ ] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7.
+- [x] Confirmar a regra atual da Anatel (RQUAL, Resolução 717/2019) antes da Fase 7: pesquisado na
+  Fase 7 (seção 7). Os documentos operacionais do RQUAL seguem não lidos; reler se o AvaNet virar produto.
 - [x] A notificação aparece na tela do dono? Sim, após o atalho no Menu Iniciar (Fase 5).
 - [x] Embutir as fontes do painel (Fraunces e IBM Plex, licença OFL): feito na Fase 6, com o
   texto das licenças em `ui/static/fonts`.

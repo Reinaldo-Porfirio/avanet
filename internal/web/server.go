@@ -44,6 +44,7 @@ type Agent interface {
 type Reports interface {
 	Load(ctx context.Context, day domain.Day, now time.Time) (*analysis.Daily, error)
 	Days(ctx context.Context, now time.Time) ([]report.DayEntry, error)
+	Insights(ctx context.Context, until domain.Day, now time.Time, planDownload, planUpload float64) (*analysis.Insights, error)
 }
 
 // Store is the persistence the panel needs (implemented by *storage.DB).
@@ -156,6 +157,7 @@ func (s *Server) routes() http.Handler {
 	api.HandleFunc("GET /api/now", s.handleNow)
 	api.HandleFunc("GET /api/reports", s.handleReports)
 	api.HandleFunc("GET /api/reports/{day}", s.handleReport)
+	api.HandleFunc("GET /api/insights", s.handleInsights)
 	api.HandleFunc("GET /api/settings", s.handleSettings)
 	api.HandleFunc("PUT /api/settings", s.handleSaveSettings)
 	api.HandleFunc("PUT /api/autostart", s.handleAutostart)

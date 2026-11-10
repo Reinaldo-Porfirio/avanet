@@ -12,7 +12,7 @@ import (
 
 // Version identifies the format of Daily. Bump it when the fields or their
 // meaning change: stored reports of older versions are rebuilt.
-const Version = 1
+const Version = 2 // 2: connection kind and capped speed tests
 
 // Number of hours and of parts of the day in a report.
 const (
@@ -42,6 +42,9 @@ type Daily struct {
 	ProfileName string `json:"profile_name"`
 	InProgress  bool   `json:"in_progress"` // the day is not over yet
 	Network     string `json:"network,omitempty"`
+	// Connection is the kind of the day's main network: wifi, ethernet,
+	// mobile or other; empty when unknown.
+	Connection string `json:"connection,omitempty"`
 
 	Grade    domain.Quality `json:"grade"`
 	Headline string         `json:"headline"` // the day in one sentence
@@ -135,6 +138,9 @@ type SpeedPoint struct {
 	DownloadMbps float64   `json:"download_mbps"`
 	UploadMbps   float64   `json:"upload_mbps"`
 	LocalTraffic bool      `json:"local_traffic"`
+	// Capped: the test hit its data cap, so a very fast link may have been
+	// underestimated.
+	Capped bool `json:"capped,omitempty"`
 }
 
 // Build computes the report of a day.
@@ -157,6 +163,7 @@ func Build(in *Input) (*Daily, error) {
 		ProfileID: string(in.Profile.ID), ProfileName: in.Profile.Name,
 		InProgress:    in.Now.Before(in.End),
 		Network:       networkLabel(in.Data),
+		Connection:    connectionKind(in.Data),
 		DataUsedBytes: in.Data.DataUsed,
 		Coverage: Coverage{
 			MonitoredMs: millis(covered(in.Data.Sessions, in.Start, windowEnd)),
@@ -205,6 +212,13 @@ func networkLabel(data *domain.DayData) string {
 		return "Outra conexão"
 	}
 	return ""
+}
+
+func connectionKind(data *domain.DayData) string {
+	if !data.HasNetwork {
+		return ""
+	}
+	return data.Network.Kind.String()
 }
 
 // covered sums the part of each session inside [from, to).

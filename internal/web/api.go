@@ -235,6 +235,31 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, daily)
 }
 
+// handleInsights answers with the patterns and the plan comparison up to the
+// day in ?until= (yesterday when absent).
+func (s *Server) handleInsights(w http.ResponseWriter, r *http.Request) {
+	now := s.deps.Now()
+	until := domain.DayOf(now)
+	if requested := r.URL.Query().Get("until"); requested != "" {
+		until = domain.Day(requested)
+	}
+	if !until.Valid() {
+		s.writeError(w, http.StatusBadRequest, "Data inválida.")
+		return
+	}
+	prefs, err := s.preferences(r)
+	if err != nil {
+		s.fail(w, "read preferences", err)
+		return
+	}
+	insights, err := s.deps.Reports.Insights(r.Context(), until, now, prefs.PlanDownloadMbps, prefs.PlanUploadMbps)
+	if err != nil {
+		s.fail(w, "build insights", err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, insights)
+}
+
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	prefs, err := s.preferences(r)
 	if err != nil {

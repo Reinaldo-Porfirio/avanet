@@ -265,6 +265,39 @@ func TestDaysListsStoredAndUnbuiltDays(t *testing.T) {
 	}
 }
 
+func TestInsightsLookOnlyAtFinishedDays(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	now := date(9, 10, 0)
+	for day := 1; day <= 9; day++ {
+		h.measure(date(day, 12, 0))
+	}
+
+	got, err := h.svc.Insights(ctx, "2026-11-09", now, 500, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Until != "2026-11-08" {
+		t.Errorf("until = %s: today is not finished", got.Until)
+	}
+	if got.Patterns.Days != analysis.PatternWindowDays {
+		t.Errorf("pattern days = %d, want the last week only", got.Patterns.Days)
+	}
+	if got.Plan == nil || got.Plan.PlanDownloadMbps != 500 {
+		t.Errorf("plan = %+v", got.Plan)
+	}
+
+	if got, err = h.svc.Insights(ctx, "2026-11-03", now, 0, 0); err != nil || got.Until != "2026-11-03" || got.Plan != nil {
+		t.Errorf("past day: %+v, %v", got, err)
+	}
+	if got.Patterns.Days != 3 {
+		t.Errorf("days up to the 3rd: %d", got.Patterns.Days)
+	}
+	if _, err := h.svc.Insights(ctx, "nope", now, 0, 0); !errors.Is(err, domain.ErrInvalidSample) {
+		t.Errorf("bad day: %v", err)
+	}
+}
+
 func TestTickPrunesOldRawData(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()

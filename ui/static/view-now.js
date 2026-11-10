@@ -4,6 +4,7 @@ import { ApiError, api } from "./api.js";
 import { clock24 } from "./charts.js";
 import { h } from "./dom.js";
 import { bytes, clock, hours, hourOfDay, int, one, qualityWord, short } from "./format.js";
+import { forecast } from "./insights.js";
 import { badge, chain, clockLegend, sectionTitle, usageBar } from "./parts.js";
 
 const POLL_MS = 15000;
@@ -116,11 +117,12 @@ function numbers(now) {
     stat("Perfil", now.profile.name, "", h("a", { href: "#/ajustes" }, "trocar")));
 }
 
-function page(now, report, state, refresh) {
+function page(now, report, insights, state, refresh) {
   return [
     h("div", { class: "dateline" }, h("span", null, "Agora"), h("span", null, `Perfil: ${now.profile.name}`, now.connection && ` · ${now.connection}`)),
     !now.profile_chosen && welcome(),
     hero(now, report),
+    forecast(insights),
     sectionTitle("O caminho da sua conexão", h("p", null, "Separa o que é da sua casa do que é da operadora")),
     path(now),
     sectionTitle("Os números de agora"),
@@ -145,9 +147,14 @@ export function nowView(container, onError) {
   const state = { requested: false, error: "" };
   let timer = 0, stopped = false, lastKey = "";
 
+  // The patterns change once a day, so they are read once per visit, and a
+  // failure there only leaves the forecast out.
+  let insights = null;
+  const insightsLoaded = api.insights().then((value) => { insights = value; }, () => {});
+
   const render = (now, report) => {
     const focused = document.activeElement?.dataset?.focus;
-    container.replaceChildren(...page(now, report, state, refresh).filter(Boolean));
+    container.replaceChildren(...page(now, report, insights, state, refresh).filter(Boolean));
     if (focused) container.querySelector(`[data-focus="${focused}"]`)?.focus();
   };
 
@@ -168,7 +175,7 @@ export function nowView(container, onError) {
       const key = JSON.stringify([stable, state]);
       if (key !== lastKey) {
         latest = now;
-        latestReport = await loadToday(now.today);
+        [latestReport] = await Promise.all([loadToday(now.today), insightsLoaded]);
         if (stopped) return;
         lastKey = key;
         render(latest, latestReport);

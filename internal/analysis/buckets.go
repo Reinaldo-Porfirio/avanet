@@ -215,7 +215,10 @@ func speedStats(tests []domain.SpeedResult) (download, upload Stat, points []Spe
 	points = make([]SpeedPoint, 0, len(tests))
 	for i := range tests {
 		s := &tests[i]
-		points = append(points, SpeedPoint{At: s.Start, DownloadMbps: s.DownloadMbps, UploadMbps: s.UploadMbps, LocalTraffic: s.LocalTraffic})
+		points = append(points, SpeedPoint{
+			At: s.Start, DownloadMbps: s.DownloadMbps, UploadMbps: s.UploadMbps,
+			LocalTraffic: s.LocalTraffic, Capped: s.DownloadCapped || s.UploadCapped,
+		})
 		if s.LocalTraffic {
 			ignored++
 			continue

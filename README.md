@@ -4,7 +4,7 @@ Monitor de qualidade de internet para Windows. Fica em segundo plano medindo lat
 download e upload, e todo dia às 8h entrega um relatório do dia anterior: melhores e piores horários,
 se o problema está no seu Wi-Fi ou na operadora e, com alguns dias de dados, os padrões da sua conexão.
 
-> **Status:** em desenvolvimento. Fases 0 a 6 concluídas: monitoramento em segundo plano, boletim diário e painel local.
+> **Status:** em desenvolvimento. Fases 0 a 7 concluídas: monitoramento em segundo plano, boletim diário, painel local, padrões e comparação com o plano.
 > Planejamento completo em [docs/PLANEJAMENTO.md](docs/PLANEJAMENTO.md).
 
 ## Princípios

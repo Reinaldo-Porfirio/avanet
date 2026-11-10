@@ -27,6 +27,7 @@ export const api = {
   now: () => request("/api/now"),
   days: () => request("/api/reports"),
   report: (day) => request(`/api/reports/${encodeURIComponent(day)}`),
+  insights: (until) => request(until ? `/api/insights?until=${encodeURIComponent(until)}` : "/api/insights"),
   settings: () => request("/api/settings"),
   saveSettings: (preferences) => send("PUT", "/api/settings", preferences),
   setAutostart: (enabled) => send("PUT", "/api/autostart", { enabled }),

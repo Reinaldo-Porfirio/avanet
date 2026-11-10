@@ -51,6 +51,14 @@ func (a *fakeAgent) ApplySettings(p *domain.Profile, b domain.DataBudget) error 
 type fakeReports struct {
 	daily *analysis.Daily
 	err   error
+	// What Insights was asked for.
+	until            domain.Day
+	planDown, planUp float64
+}
+
+func (r *fakeReports) Insights(_ context.Context, until domain.Day, _ time.Time, down, up float64) (*analysis.Insights, error) {
+	r.until, r.planDown, r.planUp = until, down, up
+	return &analysis.Insights{Until: until, Patterns: analysis.PatternReport{Patterns: []analysis.Pattern{}}}, r.err
 }
 
 func (r *fakeReports) Load(context.Context, domain.Day, time.Time) (*analysis.Daily, error) {
@@ -487,6 +495,26 @@ func TestReports(t *testing.T) {
 	h.reports.err = analysis.ErrNoData
 	if got := h.call(http.MethodGet, "/api/reports/2026-11-01", ""); got.status != http.StatusNotFound {
 		t.Errorf("no data: %d", got.status)
+	}
+}
+
+func TestInsightsUseThePlanAndValidateTheDay(t *testing.T) {
+	h := newHarness(t)
+	h.login()
+	if got := h.call(http.MethodPut, "/api/settings", validSettings); got.status != http.StatusOK {
+		t.Fatal(got.body)
+	}
+	if got := h.call(http.MethodGet, "/api/insights?until=2026-11-07", ""); got.status != http.StatusOK || !strings.Contains(got.body, `"until":"2026-11-07"`) {
+		t.Errorf("%d %s", got.status, got.body)
+	}
+	if h.reports.planDown != 500 || h.reports.planUp != 50 || h.reports.until != "2026-11-07" {
+		t.Errorf("asked for %+v", h.reports)
+	}
+	if got := h.call(http.MethodGet, "/api/insights", ""); got.status != http.StatusOK || h.reports.until != domain.DayOf(h.now) {
+		t.Errorf("default day: %d, until %s", got.status, h.reports.until)
+	}
+	if got := h.call(http.MethodGet, "/api/insights?until=amanha", ""); got.status != http.StatusBadRequest {
+		t.Errorf("bad day: %d", got.status)
 	}
 }
 
