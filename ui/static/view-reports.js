@@ -4,6 +4,7 @@ import { ApiError, api } from "./api.js";
 import { clock24, latencyChart, speedChart } from "./charts.js";
 import { glyph, h } from "./dom.js";
 import { bytes, clock, dateChip, dateLong, hourLabel, hours, int, one, qualityClass, qualityWord, short } from "./format.js";
+import { patternsSection, planSection } from "./insights.js";
 import { badge, chain, clockLegend, sectionTitle, usageBar } from "./parts.js";
 
 const GLYPHS = {
@@ -154,7 +155,7 @@ function dayStrip(days, current) {
   }));
 }
 
-function bulletin(report, entries, settings) {
+function bulletin(report, entries, settings, insights) {
   const position = entries.findIndex((e) => e.day === report.day);
   const number = position >= 0 ? entries.length - position : entries.length + 1;
   const prefs = settings.preferences;
@@ -169,7 +170,9 @@ function bulletin(report, entries, settings) {
     speedSection(report, prefs.plan_download_mbps),
     latencySection(report),
     diagnosis(report),
+    patternsSection(insights),
     numbers(report),
+    planSection(insights),
     usageBar("Dados usados pelo AvaNet neste dia", report.data_used_bytes, prefs.fixed_daily_mb * 1e6, `${bytes(report.data_used_bytes)} de ${bytes(prefs.fixed_daily_mb * 1e6)}`),
   ].flat();
 }
@@ -187,9 +190,9 @@ export async function reportsView(container, day, onError) {
       return;
     }
     const selected = day || (index.days.find((d) => d.day !== index.today) ?? index.days[0]).day;
-    let report;
+    let report, insights;
     try {
-      report = await api.report(selected);
+      [report, insights] = await Promise.all([api.report(selected), api.insights(selected)]);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 400)) {
         container.replaceChildren(dayStrip(index.days, selected), ...notice("Sem dados neste dia", "O AvaNet não mediu nada nesta data. Escolha outro dia acima."));
@@ -197,7 +200,7 @@ export async function reportsView(container, day, onError) {
       }
       throw error;
     }
-    container.replaceChildren(...bulletin(report, index.days, settings).filter(Boolean));
+    container.replaceChildren(...bulletin(report, index.days, settings, insights).filter(Boolean));
   } catch (error) {
     onError(error);
   }

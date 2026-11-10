@@ -173,6 +173,37 @@ h1 em.poor { color: var(--poor); }
 .forecast dt { font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--paper) 70%, transparent); }
 .forecast dd { margin: 4px 0 0; font: 400 21px/1.3 var(--serif); }
 
+/* Patterns */
+.pattern-text { margin: 16px 0 18px; font: 400 21px/1.35 var(--serif); }
+.confidence { display: flex; align-items: center; gap: 10px; font: 500 12px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.forecast .confidence { color: color-mix(in srgb, var(--paper) 70%, transparent); }
+.confidence .dots { display: flex; gap: 4px; }
+.confidence .dots i { width: 22px; height: 6px; border-radius: 3px; background: var(--rule); }
+.forecast .confidence .dots i { background: color-mix(in srgb, var(--paper) 25%, transparent); }
+.confidence .dots i.on, .forecast .confidence .dots i.on { background: var(--fair); }
+.empty-note { margin: 0; color: var(--ink-soft); }
+.forecast-banner { border-color: var(--fair); background: var(--fair-wash); }
+
+/* Contracted plan */
+.plan-metric .label { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.plan-metric .value { font: 400 44px/1 var(--serif); margin: 12px 0 18px; letter-spacing: -.02em; }
+.plan-metric .value small { font: 500 14px var(--sans); color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.plan-bar { position: relative; height: 14px; border-radius: 7px; background: var(--rule); margin: 8px 0 16px; }
+.plan-bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: var(--ink-soft); }
+.plan-bar .mark { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--ink); }
+.plan-bar .lowest { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--surface); border: 2.5px solid var(--poor); }
+.plan-numbers { margin: 0 0 12px; font-size: 14px; color: var(--ink-soft); }
+.plan-verdict { margin: 0; font-weight: 600; font-size: 15px; }
+.plan-verdict.good { color: var(--good); }
+.plan-verdict.poor { color: var(--poor); }
+.plan-notes { margin-top: 14px; font-size: 13px; color: var(--muted); max-width: 90ch; }
+.plan-notes p { margin: 0 0 8px; }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.plan-key { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.plan-key.fill { width: 18px; height: 8px; border-radius: 4px; background: var(--ink-soft); }
+.plan-key.mark { width: 2px; height: 14px; background: var(--ink); }
+.plan-key.lowest { width: 10px; height: 10px; border-radius: 50%; border: 2.5px solid var(--poor); }
+
 /* Numbers */
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 22px; overflow: hidden; }
 .stat { padding: 18px 20px; background: var(--surface); }

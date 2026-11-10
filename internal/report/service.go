@@ -202,6 +202,40 @@ func (s *Service) Days(ctx context.Context, now time.Time) ([]DayEntry, error) {
 	return entries, nil
 }
 
+// Insights looks at the finished days up to until (yesterday at the latest):
+// the patterns of the last week and, when a plan speed is given, how the last
+// 30 days compare with it.
+func (s *Service) Insights(ctx context.Context, until domain.Day, now time.Time, planDownload, planUpload float64) (*analysis.Insights, error) {
+	last, err := time.ParseInLocation(time.DateOnly, string(until), now.Location())
+	if err != nil {
+		return nil, fmt.Errorf("%w: day %q", domain.ErrInvalidSample, until)
+	}
+	if yesterday := domain.StartOfLocalDay(now).AddDate(0, 0, -1); last.After(yesterday) {
+		last = yesterday
+	}
+
+	var month, week []*analysis.Daily
+	for offset := range analysis.PlanWindowDays {
+		day := domain.DayOf(last.AddDate(0, 0, -offset))
+		daily, err := s.Load(ctx, day, now)
+		if errors.Is(err, analysis.ErrNoData) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		month = append(month, daily)
+		if offset < analysis.PatternWindowDays {
+			week = append(week, daily)
+		}
+	}
+	return &analysis.Insights{
+		Until:    domain.DayOf(last),
+		Patterns: analysis.FindPatterns(week),
+		Plan:     analysis.ComparePlan(month, planDownload, planUpload),
+	}, nil
+}
+
 func (s *Service) loadFinished(ctx context.Context, day domain.Day, from, to, now time.Time) (*analysis.Daily, error) {
 	stored, found, err := s.Store.DailyReport(ctx, day)
 	if err != nil {
